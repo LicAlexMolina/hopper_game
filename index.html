@@ -18,12 +18,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600&display=swap" rel="stylesheet">
 
   <style>
-    /*
-      Las variables CSS (--algo) son el equivalente a definir constantes/config
-      en Python (como un CONFIG = {...} al inicio de un script). Las defines una
-      vez aquí en :root y las reusas en cualquier parte con var(--nombre).
-      Si mañana quieres cambiar el rosa por otro color favorito, solo tocas UNA línea.
-    */
     :root {
       --bg-deep: #05060A;      /* negro profundo del espacio */
       --bg-nebula: #150b2e;    /* morado oscuro para el degradado de nebulosa */
@@ -62,12 +56,6 @@
       touch-action: none;
     }
 
-    /*
-      Marco HUD: 4 esquinas tipo "mira de cabina de nave".
-      Cada .hud-corner es un div posicionado absolutamente en una esquina,
-      con dos bordes visibles (los otros dos transparentes) para que parezca
-      un corchete [ ] en vez de un cuadro completo.
-    */
     .hud-corner {
       position: absolute;
       width: 28px;
@@ -121,14 +109,6 @@
       actualizarPiso();   // recalculamos el suelo al nuevo tamaño de pantalla
     }
 
-    /*
-      Vamos a simular profundidad con 3 "capas" de estrellas que se mueven a
-      distinta velocidad (parallax): las más lejanas se mueven lento, las
-      cercanas rápido. Es la misma idea de fondo que un fondo de videojuego
-      2D clásico. Guardamos las estrellas en un array de objetos, igual que
-      guardarías una lista de diccionarios en Python:
-      estrellas = [{'x':.., 'y':.., 'r':.., 'vel':..}, ...]
-    */
     let estrellas    = [];
     let alfaEstrellas = 0.7; // opacidad de las estrellas (se reduce durante el día)
 
@@ -176,61 +156,15 @@
 
 
     // ─── FÍSICA DE LA NAVE ────────────────────────────────────────────────────
-    /*
-      Los tres ingredientes de la física de salto:
+    const GRAVEDAD      = 0.45;
+    const IMPULSO_SALTO = -14;
+    const NAVE_ANCHO    = 50;
+    const NAVE_ALTO     = 28;
+    const NAVE_X        = 80;
 
-      GRAVEDAD (aceleración): cuánto aumenta la velocidad hacia abajo por frame.
-        En física real, la aceleración gravitacional es constante (9.8 m/s² en
-        la Tierra). Aquí usamos la misma idea pero en "píxeles por frame²".
-        Cada frame, la nave cae un poco más rápido que el frame anterior — la
-        velocidad no es fija, se acumula. Eso es exactamente lo que hace que los
-        saltos se sientan naturales en lugar de robóticos.
-
-      nave.velY (velocidad): qué tan rápido se mueve la nave verticalmente AHORA.
-        Empieza en 0. La gravedad la incrementa cada frame automáticamente.
-        IMPORTANTE: en canvas, el eje Y crece hacia ABAJO (al revés de lo normal):
-          velY > 0  →  nave cayendo  ↓
-          velY < 0  →  nave subiendo ↑
-
-      IMPULSO_SALTO (velocidad inicial del salto): cuando la nave salta, le
-        asignamos velY = IMPULSO_SALTO de golpe (un número negativo grande).
-        A partir de ese momento, la gravedad va "frenando" esa velocidad negativa
-        hasta que llega a 0 en el punto más alto, y luego la convierte en positiva
-        (la nave empieza a caer). Es exactamente como lanzar una pelota hacia arriba.
-
-      Relación entre los tres:
-        Tiempo hasta el pico = |IMPULSO_SALTO| / GRAVEDAD
-        Con IMPULSO = -12 y GRAVEDAD = 0.5 → pico en ~24 frames (≈ 0.4 seg a 60fps).
-        Altura máxima ≈ velY² / (2 × GRAVEDAD) = 144 / 1 = 144 px de subida.
-        Siempre ajusta GRAVEDAD y IMPULSO_SALTO juntos: si haces la gravedad más
-        fuerte sin subir el impulso, el salto quedará bajo y corto.
-    */
-    const GRAVEDAD      = 0.45; // px/frame² — controla cuán "pesada" se siente la nave
-    const IMPULSO_SALTO = -14;  // px/frame  — velocidad inicial al saltar (negativo = arriba)
-    const NAVE_ANCHO    = 50;   // ancho del placeholder en píxeles
-    const NAVE_ALTO     = 28;   // alto del placeholder en píxeles
-    const NAVE_X        = 80;   // posición X fija (el mundo avanza, la nave no)
-
-    /*
-      pisoY: coordenada Y de la línea de suelo.
-      Se recalcula en actualizarPiso() porque depende de canvas.height,
-      que cambia cuando el usuario rota el celular o redimensiona la ventana.
-    */
     let pisoY = 0;
+    let nave  = { y: 0, velY: 0, enPiso: true };
 
-    /*
-      nave: objeto con todo el estado móvil del personaje.
-      Equivalente en Python a: nave = {'y': 0, 'velY': 0, 'enPiso': True}
-        y       → coordenada Y del borde SUPERIOR de la nave
-        velY    → velocidad vertical actual (px/frame)
-        enPiso  → True cuando la nave toca el suelo (permite saltar)
-    */
-    let nave = { y: 0, velY: 0, enPiso: true };
-
-    /*
-      actualizarPiso(): recalcula pisoY y reposiciona la nave si estaba en el suelo.
-      Se llama desde ajustarTamano() para mantener todo coherente con el nuevo tamaño.
-    */
     function actualizarPiso() {
       pisoY = canvas.height - 100;
       if (nave.enPiso) {
@@ -238,12 +172,6 @@
       }
     }
 
-    /*
-      actualizarFisica(): se ejecuta UNA VEZ por frame, ANTES de dibujar.
-      Aplica gravedad → mueve la nave → detecta colisión con el suelo.
-      Este patrón "actualizar estado → dibujar resultado" es el núcleo de
-      cualquier game loop, lo mismo que en pygame o cualquier motor 2D.
-    */
     function actualizarFisica() {
       const prevBottom = nave.y + NAVE_ALTO; // posición inferior antes de este step
 
@@ -281,11 +209,6 @@
       }
     }
 
-    /*
-      dibujarPiso(): línea de suelo visual sutil.
-      La colisión real ya la maneja actualizarFisica(); esto es solo decorativo
-      para que el jugador vea dónde "aterriza" la nave.
-    */
     function dibujarPiso() {
       ctx.save();
 
@@ -323,26 +246,6 @@
       ctx.restore();
     }
 
-    /*
-      dibujarNave(): placeholder cian con inclinación dinámica según velY.
-
-      ¿Por qué save/restore + translate + rotate?
-        El canvas aplica transformaciones (rotar, escalar) desde un "origen" global.
-        Para rotar SOLO la nave alrededor de SU centro necesitamos:
-          1. save()             → guardar el estado actual (sin transformaciones)
-          2. translate(cx, cy)  → mover el origen al centro de la nave
-          3. rotate(angulo)     → rotar el canvas alrededor de ese nuevo origen
-          4. fillRect(...)      → dibujar el rect centrado en (0,0) del origen movido
-          5. restore()          → devolver todo al estado guardado en el paso 1
-        Sin save/restore, la rotación se acumularía frame a frame y giraría sin parar.
-
-      Inclinación según velY:
-        velY negativo (subiendo) → ángulo negativo → nose hacia arriba  ↗
-        velY positivo (cayendo)  → ángulo positivo → nose hacia abajo   ↘
-        Factor 0.04 convierte px/frame a radianes. Math.max/min lo limita a
-        ±0.44 rad (≈ ±25°) para que la inclinación no sea exagerada.
-    */
-    // dibujarCastor acepta coordenadas externas → permite reutilizarlo en el cap2
     function dibujarCastor(x, y, velY, enPiso) {
       const cx = x + NAVE_ANCHO / 2;
       const cy = y + NAVE_ALTO / 2;
@@ -424,27 +327,12 @@
       ctx.restore();
     }
 
-    // Wrapper fino para el juego normal
     function dibujarNave() {
       dibujarCastor(NAVE_X, nave.y, nave.velY, nave.enPiso);
     }
 
 
     // ─── CIELO DINÁMICO (DÍA / NOCHE) ────────────────────────────────────────────
-    /*
-      El cielo cambia de color gradualmente a lo largo de la partida, siguiendo
-      un ciclo de 90 segundos (CICLO_DURACION frames). La variable 't' (0→1)
-      representa la posición en ese ciclo:
-        0.00 – 0.15  noche
-        0.15 – 0.30  amanecer (naranja/rosa)
-        0.30 – 0.60  día (azul claro, sol visible)
-        0.60 – 0.80  atardecer (naranja/rojo)
-        0.80 – 1.00  noche otra vez
-
-      Técnica: interpolación lineal entre keyframes de color RGB.
-        color_final = c1 + (c2 - c1) × f   (donde f ∈ [0,1])
-      Es la misma idea que una "animación de tweening" en cualquier motor 2D.
-    */
     const CICLO_DURACION = 5400; // frames por ciclo (~90 seg a 60fps)
 
     const CIELO_KF = [
@@ -536,28 +424,9 @@
 
 
     // ─── OBSTÁCULOS Y DIFICULTAD PROGRESIVA ──────────────────────────────────────
-    /*
-      velocidadMundo es la variable central de la dificultad: controla qué tan
-      rápido avanzan los obstáculos. Se calcula con raíz cuadrada del score:
-        velocidad = BASE + √score × 0.05
-
-      ¿Por qué raíz cuadrada y no lineal?
-        Con escala lineal (score × k), la dificultad sube para siempre al mismo
-        ritmo — injusto para el jugador nuevo y aburrido para el experto.
-        Con √score, la dificultad sube rápido al principio (curva de aprendizaje)
-        y se aplana en niveles altos. Así el juego siempre está en el "borde
-        del desafío" sin sentirse imposible.
-
-      Dos tipos de obstáculos según su posición:
-        'piso'  → crece desde el suelo    → señal ROSA  → HAY QUE SALTAR
-        'techo' → cuelga desde el techo   → señal DORADA → HAY QUE QUEDARSE ABAJO
-
-      Los de techo solo aparecen pasada cierta velocidad, cuando el jugador
-      ya aprendió a saltar. Nunca dos techos seguidos (sin tiempo de reacción).
-    */
-    const VEL_MUNDO_BASE = 2.5; // px/frame al inicio del juego
-    const VEL_MUNDO_MAX  = 12;  // px/frame máximo (sube mucho más alto para ser desafiante)
-    const OBS_ANCHO      = 40;  // ancho base de obstáculos en px
+    const VEL_MUNDO_BASE = 2.5;
+    const VEL_MUNDO_MAX  = 12;
+    const OBS_ANCHO      = 40;  // fallback; cada obstáculo define su propio ancho
 
     let velocidadMundo     = VEL_MUNDO_BASE;
     let obstaculos         = [];
@@ -615,7 +484,6 @@
         obstaculos.push({ tipo, x: canvas.width + 10, y: pisoY - alto, alto, ancho });
 
       } else if (tipo === 'rama') {
-        // Rama del techo: igual que el viejo 'techo'
         const jumpHeight = (IMPULSO_SALTO * IMPULSO_SALTO) / (2 * GRAVEDAD);
         const peakNavTop = pisoY - NAVE_ALTO - jumpHeight;
         const minAlto    = peakNavTop + 28;
@@ -636,11 +504,6 @@
       framesSiguienteObs -= dt;
       if (framesSiguienteObs <= 0) {
         spawnObstaculo();
-        /*
-          Intervalo inversamente proporcional a la velocidad: cuanto más rápido
-          va el mundo, más seguido aparecen obstáculos (el espacio "se acorta").
-          Math.max(50,...) garantiza un mínimo de 50 frames entre obstáculos.
-        */
         const base  = Math.max(34, Math.round(120 - velocidadMundo * 8));
         const extra = (ultimoTipoObs === 'rio' || ultimoTipoObs === 'puente') ? 22 : 0;
         framesSiguienteObs = base + extra + Math.floor(Math.random() * 32);
@@ -763,10 +626,6 @@
       });
     }
 
-    /*
-      AABB funciona igual para ambos tipos de obstáculo — las coordenadas
-      y/alto ya están correctamente seteadas en spawnObstaculo().
-    */
     const MARGEN_HITBOX = 4;
 
     function detectarColision() {
@@ -787,11 +646,6 @@
 
 
     // ─── SCORE ───────────────────────────────────────────────────────────────────
-    /*
-      score sube 1 por frame mientras el juego está activo.
-      A 60fps eso es 60 puntos/segundo. Lo mostramos como "metros" — una medida
-      relativa que sirve para comparar partidas entre sí, no para ser realista.
-    */
     let score = 0;
 
     function dibujarScore() {
@@ -816,23 +670,16 @@
 
 
     // ─── ESTADOS DEL JUEGO ───────────────────────────────────────────────────────
-    /*
-      estadoJuego: máquina de estados del juego. Siempre está en uno de tres estados:
-        'INICIO'    → menú de bienvenida, nave flotando, esperando que el jugador toque
-        'JUGANDO'   → física activa, obstáculos se mueven, score sube
-        'GAME_OVER' → todo congelado, overlay con puntaje final
-    */
-    let estadoJuego  = 'INICIO';
+    let estadoJuego  = 'INICIO';  // INICIO | JUGANDO | GAME_OVER | CAPITULO_2
     let frameContador = 0;
-    let dt        = 1;        // multiplicador de delta-time (1.0 = 60fps, 2.0 = 30fps, etc.)
-    let lastTime  = 0;        // timestamp del frame anterior para calcular dt
+    let dt       = 1;
+    let lastTime = 0;
 
     // ─── CAPÍTULO 2 — LA PROPUESTA ───────────────────────────────────────────────
-    // localStorage guarda valores entre sesiones (como un dict persistente en el navegador)
     let partidasJugadas   = parseInt(localStorage.getItem('hopper_partidas') || '0');
     let propuestaAceptada = localStorage.getItem('hopper_si') === 'true';
 
-    let estadoCap2      = 'INTRO';  // INTRO | CAMINANDO | PROPUESTA | CELEBRACION
+    let estadoCap2      = 'INTRO';  // INTRO | INTRO_CORRE | FADE | CAMINO | PROPUESTA_BOTONES | CELEBRACION | FINAL
     let cap2Frame       = 0;
     let cap2BeaverX     = 0;        // posición X del castor durante la escena
     let forzarAtardecer = false;    // congela el cielo en dorado durante cap2
@@ -902,12 +749,6 @@
       ctx.lineTo(cx + 90, cy + 18);
       ctx.stroke();
 
-      /*
-        Efecto de pulso con Math.sin: el valor oscila entre -1 y 1 a lo largo del tiempo.
-        Al sumar 0.5 y multiplicar por 0.5 lo convertimos al rango [0, 1].
-        Luego lo usamos como globalAlpha para que el texto aparezca y desaparezca suavemente.
-        frameContador * 0.07 controla la velocidad del pulso: más alto = más rápido.
-      */
       const pulso = 0.5 + 0.5 * Math.sin(frameContador * 0.07);
       ctx.globalAlpha = 0.35 + 0.65 * pulso;
       ctx.font        = '600 19px "Rajdhani", sans-serif';
@@ -1199,7 +1040,7 @@
             ctx.globalAlpha *= Math.min(1, (doorOpen - 0.78) / 0.22);
             ctx.font = '700 20px "Orbitron", sans-serif';
             ctx.fillStyle = '#FFE8F5'; ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 14;
-            ctx.fillText('¡Hopper!', cxP, pY - 20);
+            ctx.fillText('¡Alex!', cxP, pY - 20);
             ctx.shadowBlur = 0;
             ctx.restore();
           }
@@ -1342,7 +1183,7 @@
           ctx.globalAlpha = intAlpha * reactAlpha;
           ctx.font = '600 17px "Rajdhani", sans-serif';
           ctx.fillStyle = '#FFE8F5'; ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 8;
-          ctx.fillText('¡Hopper! ¿Qué haces aquí...?', cxP, H * 0.14);
+          ctx.fillText('¡Alex! ¿Qué haces aquí...?', cxP, H * 0.14);
           ctx.shadowBlur = 0;
         }
 
@@ -1502,39 +1343,6 @@
 
         ctx.globalAlpha = 1;
 
-      // ── PROPUESTA: texto + espera tap antes de mostrar botones ──
-      } else if (estadoCap2 === 'PROPUESTA') {
-        dibujarEscenaCamino();
-
-        const ESC = 0.43;
-        const bop = Math.abs(Math.sin(cap2Frame * 0.06)) * 4;
-        dibujarCastorEn3D(cx - 22, horizonY + 14 - bop, ESC, 0, true);
-        dibujarElena(    cx + 22, horizonY + 14,         ESC);
-
-        const fi = Math.min(1, cap2Frame / 55);
-        ctx.globalAlpha = fi;
-
-        ctx.font        = '700 26px "Orbitron", sans-serif';
-        ctx.fillStyle   = '#FFD166';
-        ctx.shadowColor = '#FFD166'; ctx.shadowBlur = 16;
-        ctx.fillText('Elena...', cx, cy - 88);
-        ctx.shadowBlur  = 0;
-
-        if (cap2Frame > 45) {
-          ctx.globalAlpha = Math.min(1, (cap2Frame - 45) / 40) * fi;
-          ctx.font        = '700 23px "Orbitron", sans-serif';
-          ctx.fillStyle   = '#FFFFFF';
-          ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 12;
-          ctx.fillText('¿Quieres ser mi novia?', cx, cy - 52);
-          ctx.shadowBlur  = 0;
-          ctx.font        = '400 17px "Rajdhani", sans-serif';
-          ctx.fillStyle   = '#D8D0FF';
-          ctx.fillText('— con todo mi cariño, Alex  🦫', cx, cy - 22);
-        }
-
-        ctx.globalAlpha = 1;
-        if (cap2Frame >= 80) dibujarTocaContinuar();
-
       // ── PROPUESTA_BOTONES: SÍ y NO ──
       } else if (estadoCap2 === 'PROPUESTA_BOTONES') {
         dibujarEscenaCamino();
@@ -1599,7 +1407,7 @@
         ctx.shadowBlur  = 0;
         ctx.font        = '600 18px "Rajdhani", sans-serif';
         ctx.fillStyle   = '#FFD166';
-        ctx.fillText('Elena  ❤  Hopper', cx, cy + 28);
+        ctx.fillText('Elena  ❤  Alex', cx, cy + 28);
         ctx.globalAlpha = 1;
 
       // ── FINAL: imagen permanente, dos hoppers con besito ──
@@ -1637,11 +1445,11 @@
         ctx.font        = '700 24px "Orbitron", sans-serif';
         ctx.fillStyle   = '#FF2E92';
         ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 24;
-        ctx.fillText('Elena  ❤  Hopper', cx, cy - 68);
+        ctx.fillText('Elena  ❤  Alex', cx, cy - 68);
         ctx.shadowBlur  = 0;
         ctx.font        = '500 14px "Rajdhani", sans-serif';
         ctx.fillStyle   = '#E8D0FF';
-        ctx.fillText('para siempre  ✦', cx, cy - 46);
+        ctx.fillText('te quiero mucho  ❤', cx, cy - 46);
 
         // botón Reiniciar (aparece después de 90 frames)
         ctx.globalAlpha = Math.min(1, Math.max(0, (cap2Frame - 90) / 30));
