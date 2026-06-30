@@ -245,24 +245,39 @@
       cualquier game loop, lo mismo que en pygame o cualquier motor 2D.
     */
     function actualizarFisica() {
-      // Paso 1 — Gravedad: cada frame la nave gana velocidad hacia abajo.
-      //   Imagina que velY empieza muy negativo (subiendo fuerte) y la gravedad
-      //   lo va empujando hacia 0 (frena la subida), luego hacia positivo (cae).
+      const prevBottom = nave.y + NAVE_ALTO; // posición inferior antes de este step
+
       nave.velY += GRAVEDAD * dt;
+      nave.y    += nave.velY * dt;
 
-      // Paso 2 — Movimiento escalado por delta-time para ser independiente del framerate.
-      nave.y += nave.velY * dt;
+      const currBottom = nave.y + NAVE_ALTO;
 
-      // Paso 3 — Colisión con el suelo.
-      //   El borde inferior de la nave es nave.y + NAVE_ALTO.
-      //   Si cruza pisoY, la "pegamos" exactamente al suelo y cancelamos velocidad.
-      //   Sin este paso, la nave atravesaría el piso y caería infinitamente.
-      if (nave.y + NAVE_ALTO >= pisoY) {
-        nave.y    = pisoY - NAVE_ALTO; // reposicionar exactamente sobre el suelo
-        nave.velY = 0;                  // cortar velocidad (sin rebote, por ahora)
-        nave.enPiso = true;
-      } else {
-        nave.enPiso = false;            // en el aire → salto deshabilitado
+      // Plataforma (puente): detectar aterrizaje sobre la superficie superior
+      let landedPlatform = false;
+      for (const obs of obstaculos) {
+        if (obs.tipo !== 'puente') continue;
+        const aw = obs.ancho || OBS_ANCHO;
+        if (NAVE_X + NAVE_ANCHO > obs.x && NAVE_X < obs.x + aw) {
+          const platTop = obs.y;
+          // El hopper pasó a través de la superficie esta frame, viniendo desde arriba
+          if (prevBottom <= platTop + 1 && currBottom >= platTop && nave.velY >= 0) {
+            nave.y      = platTop - NAVE_ALTO;
+            nave.velY   = 0;
+            nave.enPiso = true;
+            landedPlatform = true;
+            break;
+          }
+        }
+      }
+
+      if (!landedPlatform) {
+        if (nave.y + NAVE_ALTO >= pisoY) {
+          nave.y      = pisoY - NAVE_ALTO;
+          nave.velY   = 0;
+          nave.enPiso = true;
+        } else {
+          nave.enPiso = false;
+        }
       }
     }
 
@@ -540,19 +555,41 @@
       Los de techo solo aparecen pasada cierta velocidad, cuando el jugador
       ya aprendió a saltar. Nunca dos techos seguidos (sin tiempo de reacción).
     */
-    const VEL_MUNDO_BASE = 2.0; // px/frame al inicio del juego
-    const VEL_MUNDO_MAX  = 6;   // px/frame máximo alcanzable
-    const OBS_ANCHO      = 40;  // ancho fijo de todos los obstáculos en px
+    const VEL_MUNDO_BASE = 2.5; // px/frame al inicio del juego
+    const VEL_MUNDO_MAX  = 12;  // px/frame máximo (sube mucho más alto para ser desafiante)
+    const OBS_ANCHO      = 40;  // ancho base de obstáculos en px
 
     let velocidadMundo     = VEL_MUNDO_BASE;
     let obstaculos         = [];
-    let framesSiguienteObs = 200; // gracia inicial: ~3.3 segundos para reaccionar
-    let ultimoTipoObs      = 'piso'; // evita dos techos seguidos
+    let framesSiguienteObs = 190; // gracia inicial
+    let ultimoTipoObs      = 'piso';
 
     function elegirTipoObstaculo() {
-      if (velocidadMundo < 4.0)      return 'piso'; // primeros ~27 seg: solo piso
-      if (ultimoTipoObs === 'techo') return 'piso'; // nunca dos techos consecutivos
-      return Math.random() < 0.35 ? 'techo' : 'piso';
+      const aéreo  = ultimoTipoObs === 'rama';
+      const plataforma = ultimoTipoObs === 'puente';
+      const r = Math.random();
+
+      // Primeros segundos: solo obstáculos de piso variados
+      if (velocidadMundo < 3.0) {
+        if (r < 0.40) return 'piso';
+        if (r < 0.65) return 'arbol';
+        if (r < 0.82) return 'barda';
+        return 'rio';
+      }
+      // Sin dos ramas/plataformas consecutivas
+      if (aéreo || plataforma) {
+        if (r < 0.35) return 'piso';
+        if (r < 0.55) return 'arbol';
+        if (r < 0.70) return 'barda';
+        return 'rio';
+      }
+      // Mezcla completa con velocidad alta
+      if (r < 0.25) return 'piso';
+      if (r < 0.42) return 'arbol';
+      if (r < 0.56) return 'barda';
+      if (r < 0.68) return 'rio';
+      if (r < 0.85) return 'rama';
+      return 'puente';
     }
 
     function spawnObstaculo() {
@@ -560,33 +597,38 @@
       ultimoTipoObs = tipo;
 
       if (tipo === 'piso') {
-        /*
-          Obstáculo de piso: altura que crece con la velocidad del mundo.
-          Al inicio (vel=3.5): max ~56px — muy fácil de saltar.
-          En velocidad máxima (vel=9): max 105px — desafiante pero siempre superable
-          (el salto sube ~218px, así que sobran más de 100px de margen).
-        */
-        const maxAlto = Math.min(105, 30 + velocidadMundo * 7.5);
-        const alto    = 35 + Math.random() * (maxAlto - 35);
-        obstaculos.push({ tipo, x: canvas.width + 10, y: pisoY - alto, alto });
+        const maxAlto = Math.min(100, 32 + velocidadMundo * 6);
+        const alto    = 36 + Math.random() * (maxAlto - 36);
+        obstaculos.push({ tipo, x: canvas.width + 10, y: pisoY - alto, alto, ancho: 40 });
 
-      } else {
-        /*
-          Obstáculo de techo: cuelga desde y=0 hacia abajo.
-          Su borde inferior debe quedar en la "zona de peligro" del salto:
-            por DEBAJO del pico de la nave saltando  → colisiona al saltar
-            por ENCIMA de la nave en el suelo        → no colisiona si te quedas abajo
+      } else if (tipo === 'arbol') {
+        const alto  = 68 + Math.random() * 36;   // 68-104px
+        obstaculos.push({ tipo, x: canvas.width + 10, y: pisoY - alto, alto, ancho: 34 });
 
-          jumpHeight = v₀² / (2g): altura máxima del salto en píxeles.
-          peakNavTop: coordenada Y más alta que alcanza el borde superior de la nave.
-          La colisión ocurre cuando navY < obs.alto (nave sube más que el obstáculo baja).
-        */
+      } else if (tipo === 'barda') {
+        const alto  = 46 + Math.random() * 22;   // 46-68px
+        obstaculos.push({ tipo, x: canvas.width + 10, y: pisoY - alto, alto, ancho: 54 });
+
+      } else if (tipo === 'rio') {
+        const alto  = 28 + Math.random() * 14;   // 28-42px — bajo pero muy ancho
+        const ancho = 88 + Math.random() * 52;   // 88-140px
+        obstaculos.push({ tipo, x: canvas.width + 10, y: pisoY - alto, alto, ancho });
+
+      } else if (tipo === 'rama') {
+        // Rama del techo: igual que el viejo 'techo'
         const jumpHeight = (IMPULSO_SALTO * IMPULSO_SALTO) / (2 * GRAVEDAD);
         const peakNavTop = pisoY - NAVE_ALTO - jumpHeight;
-        const minAlto    = peakNavTop + 30;            // 30px por debajo del pico
-        const maxAlto    = pisoY - NAVE_ALTO - 30;     // 30px sobre la nave en piso
+        const minAlto    = peakNavTop + 28;
+        const maxAlto    = pisoY - NAVE_ALTO - 28;
         const alto       = minAlto + Math.random() * (maxAlto - minAlto);
-        obstaculos.push({ tipo, x: canvas.width + 10, y: 0, alto });
+        const ancho      = 44 + Math.random() * 22;
+        obstaculos.push({ tipo, x: canvas.width + 10, y: 0, alto, ancho });
+
+      } else if (tipo === 'puente') {
+        // Plataforma elevada: el Hopper salta ENCIMA y camina sobre ella
+        const platY   = pisoY - 60 - Math.random() * 12; // 60-72px sobre el piso
+        const ancho   = 110 + Math.random() * 40;         // 110-150px ancho
+        obstaculos.push({ tipo, x: canvas.width + 10, y: platY, alto: 13, ancho });
       }
     }
 
@@ -599,29 +641,124 @@
           va el mundo, más seguido aparecen obstáculos (el espacio "se acorta").
           Math.max(50,...) garantiza un mínimo de 50 frames entre obstáculos.
         */
-        const base = Math.max(50, Math.round(140 - velocidadMundo * 10));
-        framesSiguienteObs = base + Math.floor(Math.random() * 40);
+        const base  = Math.max(34, Math.round(120 - velocidadMundo * 8));
+        const extra = (ultimoTipoObs === 'rio' || ultimoTipoObs === 'puente') ? 22 : 0;
+        framesSiguienteObs = base + extra + Math.floor(Math.random() * 32);
       }
 
       for (let i = obstaculos.length - 1; i >= 0; i--) {
         obstaculos[i].x -= velocidadMundo * dt;
-        if (obstaculos[i].x + OBS_ANCHO < 0) obstaculos.splice(i, 1);
+        if (obstaculos[i].x + (obstaculos[i].ancho || OBS_ANCHO) < 0) obstaculos.splice(i, 1);
       }
     }
 
     function dibujarObstaculos() {
       obstaculos.forEach(obs => {
+        const aw = obs.ancho || OBS_ANCHO;
         ctx.save();
+
         if (obs.tipo === 'piso') {
-          ctx.fillStyle   = '#6B4226'; // tronco: "salta sobre mí"
-          ctx.shadowColor = '#8B5E3C';
-        } else {
-          ctx.fillStyle   = '#3A6B2A'; // rama: "quédate abajo"
-          ctx.shadowColor = '#5D9E4A';
+          // Tronco caído con veta de madera
+          ctx.fillStyle = '#7A4418'; ctx.shadowColor = '#5A3010'; ctx.shadowBlur = 8;
+          ctx.fillRect(obs.x, obs.y, aw, obs.alto);
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = '#C88040';
+          ctx.beginPath(); ctx.ellipse(obs.x + aw / 2, obs.y + 5, aw * 0.38, 5, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = '#5A3010'; ctx.lineWidth = 1.5;
+          for (let i = 1; i < 4; i++) {
+            ctx.beginPath();
+            ctx.moveTo(obs.x + 4, obs.y + (obs.alto / 4) * i);
+            ctx.lineTo(obs.x + aw - 4, obs.y + (obs.alto / 4) * i);
+            ctx.stroke();
+          }
+
+        } else if (obs.tipo === 'arbol') {
+          // Árbol: tronco + copa verde
+          const tW = 13, tX = obs.x + (aw - tW) / 2;
+          ctx.fillStyle = '#6B4226'; ctx.shadowColor = '#3E2010'; ctx.shadowBlur = 6;
+          ctx.fillRect(tX, obs.y + obs.alto * 0.48, tW, obs.alto * 0.52);
+          const cR = aw * 0.78, cY = obs.y + obs.alto * 0.38;
+          ctx.fillStyle = '#2E7D32'; ctx.shadowColor = '#1B5E20'; ctx.shadowBlur = 12;
+          ctx.beginPath(); ctx.arc(obs.x + aw / 2, cY, cR, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#43A047';
+          ctx.beginPath(); ctx.arc(obs.x + aw / 2 - 7, cY + 9, cR * 0.62, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(obs.x + aw / 2 + 7, cY + 7, cR * 0.58, 0, Math.PI * 2); ctx.fill();
+          ctx.shadowBlur = 0;
+
+        } else if (obs.tipo === 'barda') {
+          // Barda de madera: postes + rieles
+          ctx.fillStyle = '#A0722A'; ctx.shadowColor = '#6B4820'; ctx.shadowBlur = 7;
+          ctx.fillRect(obs.x, obs.y + obs.alto * 0.22, aw, 5);
+          ctx.fillRect(obs.x, obs.y + obs.alto * 0.52, aw, 5);
+          ctx.fillRect(obs.x, obs.y + obs.alto * 0.82, aw, 5);
+          const nPosts = Math.max(3, Math.round(aw / 14));
+          for (let i = 0; i < nPosts; i++) {
+            const px = obs.x + (i / (nPosts - 1)) * (aw - 8);
+            ctx.fillRect(px, obs.y, 8, obs.alto);
+          }
+          ctx.shadowBlur = 0;
+
+        } else if (obs.tipo === 'rio') {
+          // Río: agua con olas animadas
+          ctx.fillStyle = '#1565C0'; ctx.shadowColor = '#0D47A1'; ctx.shadowBlur = 10;
+          ctx.fillRect(obs.x, obs.y, aw, obs.alto);
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = '#42A5F5';
+          ctx.fillRect(obs.x, obs.y, aw, obs.alto * 0.38);
+          // Olas animadas
+          ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 1.8;
+          const offset = (frameContador * 0.5) % 18;
+          for (let i = -1; i <= Math.ceil(aw / 18) + 1; i++) {
+            const wx = obs.x + i * 18 - offset;
+            if (wx + 10 < obs.x || wx > obs.x + aw) continue;
+            ctx.beginPath();
+            ctx.moveTo(wx, obs.y + obs.alto * 0.58);
+            ctx.quadraticCurveTo(wx + 5, obs.y + obs.alto * 0.35, wx + 10, obs.y + obs.alto * 0.58);
+            ctx.stroke();
+          }
+
+        } else if (obs.tipo === 'rama') {
+          // Rama del techo con hojas colgantes
+          ctx.fillStyle = '#5D4037'; ctx.shadowColor = '#3E2723'; ctx.shadowBlur = 8;
+          ctx.fillRect(obs.x, obs.y, aw, obs.alto);
+          ctx.shadowBlur = 0;
+          ctx.strokeStyle = '#4E342E'; ctx.lineWidth = 1.5;
+          for (let i = 1; i < 3; i++) {
+            ctx.beginPath();
+            ctx.moveTo(obs.x + 4, obs.y + (obs.alto / 3) * i);
+            ctx.lineTo(obs.x + aw - 4, obs.y + (obs.alto / 3) * i + 3);
+            ctx.stroke();
+          }
+          // Hojas en el borde inferior
+          ctx.fillStyle = '#388E3C'; ctx.shadowColor = '#2E7D32'; ctx.shadowBlur = 6;
+          const leafY = obs.y + obs.alto;
+          for (let i = 0; i < 5; i++) {
+            const lx = obs.x + (i / 4) * (aw - 14) + 7;
+            const lr = 8 + Math.sin(i * 1.3) * 3;
+            ctx.beginPath(); ctx.arc(lx, leafY + lr * 0.45, lr, 0, Math.PI * 2); ctx.fill();
+          }
+          ctx.shadowBlur = 0;
+
+        } else if (obs.tipo === 'puente') {
+          // Puente elevado: pilares + tablones
+          ctx.fillStyle = '#6D4C41';
+          const pilW = 8, pilH = pisoY - obs.y - obs.alto;
+          ctx.fillRect(obs.x + 10,        obs.y + obs.alto, pilW, pilH);
+          ctx.fillRect(obs.x + aw - 18,   obs.y + obs.alto, pilW, pilH);
+          if (aw > 80) ctx.fillRect(obs.x + aw / 2 - 4, obs.y + obs.alto, pilW, pilH);
+          // Tablones
+          ctx.fillStyle = '#A1887F'; ctx.shadowColor = '#6D4C41'; ctx.shadowBlur = 8;
+          ctx.fillRect(obs.x, obs.y, aw, obs.alto);
+          ctx.shadowBlur = 0;
+          ctx.strokeStyle = '#6D4C41'; ctx.lineWidth = 1.5;
+          for (let px = obs.x + 14; px < obs.x + aw; px += 14) {
+            ctx.beginPath(); ctx.moveTo(px, obs.y); ctx.lineTo(px, obs.y + obs.alto); ctx.stroke();
+          }
+          // Borde superior (barandal)
+          ctx.strokeStyle = '#8D6E63'; ctx.lineWidth = 2.5;
+          ctx.beginPath(); ctx.moveTo(obs.x, obs.y - 1); ctx.lineTo(obs.x + aw, obs.y - 1); ctx.stroke();
         }
-        ctx.shadowBlur = 10;
-        ctx.fillRect(obs.x, obs.y, OBS_ANCHO, obs.alto);
-        ctx.shadowBlur = 0;
+
         ctx.restore();
       });
     }
@@ -639,7 +776,9 @@
       const nH = NAVE_ALTO  - MARGEN_HITBOX * 2;
 
       for (const obs of obstaculos) {
-        const sepX = nX + nW < obs.x  ||  nX > obs.x + OBS_ANCHO;
+        if (obs.tipo === 'puente') continue; // el puente usa física de plataforma, no colisión mortal
+        const aw   = obs.ancho || OBS_ANCHO;
+        const sepX = nX + nW < obs.x  ||  nX > obs.x + aw;
         const sepY = nY + nH < obs.y  ||  nY > obs.y + obs.alto;
         if (!sepX && !sepY) return true;
       }
@@ -1538,7 +1677,7 @@
       dibujarEstrellas(); // estrellas sobre el fondo (con la opacidad del momento del día)
 
       if (estadoJuego === 'JUGANDO') {
-        velocidadMundo = Math.min(VEL_MUNDO_MAX, VEL_MUNDO_BASE + Math.sqrt(score) * 0.05);
+        velocidadMundo = Math.min(VEL_MUNDO_MAX, VEL_MUNDO_BASE + Math.sqrt(score) * 0.10);
         actualizarFisica();
         actualizarObstaculos();
         score += dt;
