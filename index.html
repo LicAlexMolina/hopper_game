@@ -1,0 +1,1566 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <!--
+    Esta línea es CRÍTICA para mobile-first.
+    width=device-width: el ancho de la página = ancho real del celular (no un "zoom out" raro).
+    initial-scale=1, maximum-scale=1, user-scalable=no: evita que el usuario haga
+    pinch-zoom mientras intenta tocar la pantalla para saltar. Sin esto, cada "tap"
+    podría interpretarse como un gesto de zoom y arruinar el control del juego.
+  -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Hopper - Aventura Sin Fin</title>
+
+  <!-- Fuentes: Orbitron para títulos/HUD (look angular sci-fi), Rajdhani para texto chico -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600&display=swap" rel="stylesheet">
+
+  <style>
+    /*
+      Las variables CSS (--algo) son el equivalente a definir constantes/config
+      en Python (como un CONFIG = {...} al inicio de un script). Las defines una
+      vez aquí en :root y las reusas en cualquier parte con var(--nombre).
+      Si mañana quieres cambiar el rosa por otro color favorito, solo tocas UNA línea.
+    */
+    :root {
+      --bg-deep: #05060A;      /* negro profundo del espacio */
+      --bg-nebula: #150b2e;    /* morado oscuro para el degradado de nebulosa */
+      --accent-cyan: #00E5FF;  /* líneas de HUD / nave */
+      --accent-pink: #FF2E92;  /* corazones / cristales de energía */
+      --accent-gold: #FFD166;  /* alertas / detalles especiales */
+      --text-main: #E8F1FF;
+      --font-display: 'Orbitron', sans-serif;
+      --font-ui: 'Rajdhani', sans-serif;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg-deep);
+      touch-action: none;
+      font-family: var(--font-ui);
+      color: var(--text-main);
+    }
+
+    /* Contenedor que envuelve el canvas + el marco HUD */
+    #gameContainer {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background: radial-gradient(ellipse at 50% 30%, var(--bg-nebula) 0%, var(--bg-deep) 70%);
+    }
+
+    #gameCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+
+    /*
+      Marco HUD: 4 esquinas tipo "mira de cabina de nave".
+      Cada .hud-corner es un div posicionado absolutamente en una esquina,
+      con dos bordes visibles (los otros dos transparentes) para que parezca
+      un corchete [ ] en vez de un cuadro completo.
+    */
+    .hud-corner {
+      position: absolute;
+      width: 28px;
+      height: 28px;
+      border: 2px solid var(--accent-cyan);
+      filter: drop-shadow(0 0 4px var(--accent-cyan));
+      pointer-events: none; /* para que estos divs no bloqueen los toques del jugador */
+    }
+    .hud-corner.tl { top: 14px; left: 14px; border-right: none; border-bottom: none; }
+    .hud-corner.tr { top: 14px; right: 14px; border-left: none; border-bottom: none; }
+    .hud-corner.bl { bottom: 14px; left: 14px; border-right: none; border-top: none; }
+    .hud-corner.br { bottom: 14px; right: 14px; border-left: none; border-top: none; }
+
+    /* Línea de escaneo sutil arriba, detalle de HUD */
+    .hud-label {
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: var(--font-display);
+      font-size: 13px;
+      letter-spacing: 3px;
+      color: var(--accent-cyan);
+      text-shadow: 0 0 6px var(--accent-cyan);
+      opacity: 0.85;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="gameContainer">
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Marco tipo "mira de cabina de nave" -->
+    <div class="hud-corner tl"></div>
+    <div class="hud-corner tr"></div>
+    <div class="hud-corner bl"></div>
+    <div class="hud-corner br"></div>
+    <div class="hud-label">HOPPER EN MODO AVENTURA</div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function ajustarTamano() {
+      canvas.width  = window.innerWidth;
+      canvas.height = window.innerHeight;
+      generarEstrellas(); // si cambia el tamaño, regeneramos el campo de estrellas
+      actualizarPiso();   // recalculamos el suelo al nuevo tamaño de pantalla
+    }
+
+    /*
+      Vamos a simular profundidad con 3 "capas" de estrellas que se mueven a
+      distinta velocidad (parallax): las más lejanas se mueven lento, las
+      cercanas rápido. Es la misma idea de fondo que un fondo de videojuego
+      2D clásico. Guardamos las estrellas en un array de objetos, igual que
+      guardarías una lista de diccionarios en Python:
+      estrellas = [{'x':.., 'y':.., 'r':.., 'vel':..}, ...]
+    */
+    let estrellas    = [];
+    let alfaEstrellas = 0.7; // opacidad de las estrellas (se reduce durante el día)
+
+    function generarEstrellas() {
+      estrellas = [];
+      const capas = [
+        { cantidad: 40, velocidad: 0.3, radio: 1 },   // lejanas, lentas, chiquitas
+        { cantidad: 25, velocidad: 0.8, radio: 1.5 }, // medias
+        { cantidad: 12, velocidad: 1.6, radio: 2.2 }  // cercanas, rápidas, grandes
+      ];
+
+      capas.forEach(capa => {
+        for (let i = 0; i < capa.cantidad; i++) {
+          estrellas.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            radio: capa.radio,
+            velocidad: capa.velocidad
+          });
+        }
+      });
+    }
+
+    function dibujarEstrellas() {
+      estrellas.forEach(estrella => {
+        // Movemos cada estrella hacia la izquierda (sensación de vuelo hacia adelante)
+        estrella.x -= estrella.velocidad;
+
+        // Si la estrella sale por la izquierda, la reciclamos al lado derecho.
+        // Esto evita crear/destruir objetos constantemente (más eficiente que
+        // borrar del array y agregar uno nuevo).
+        if (estrella.x < 0) {
+          estrella.x = canvas.width;
+          estrella.y = Math.random() * canvas.height;
+        }
+
+        ctx.beginPath();
+        ctx.arc(estrella.x, estrella.y, estrella.radio, 0, Math.PI * 2);
+        ctx.fillStyle = '#E8F1FF';
+        ctx.globalAlpha = alfaEstrellas;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      });
+    }
+
+
+    // ─── FÍSICA DE LA NAVE ────────────────────────────────────────────────────
+    /*
+      Los tres ingredientes de la física de salto:
+
+      GRAVEDAD (aceleración): cuánto aumenta la velocidad hacia abajo por frame.
+        En física real, la aceleración gravitacional es constante (9.8 m/s² en
+        la Tierra). Aquí usamos la misma idea pero en "píxeles por frame²".
+        Cada frame, la nave cae un poco más rápido que el frame anterior — la
+        velocidad no es fija, se acumula. Eso es exactamente lo que hace que los
+        saltos se sientan naturales en lugar de robóticos.
+
+      nave.velY (velocidad): qué tan rápido se mueve la nave verticalmente AHORA.
+        Empieza en 0. La gravedad la incrementa cada frame automáticamente.
+        IMPORTANTE: en canvas, el eje Y crece hacia ABAJO (al revés de lo normal):
+          velY > 0  →  nave cayendo  ↓
+          velY < 0  →  nave subiendo ↑
+
+      IMPULSO_SALTO (velocidad inicial del salto): cuando la nave salta, le
+        asignamos velY = IMPULSO_SALTO de golpe (un número negativo grande).
+        A partir de ese momento, la gravedad va "frenando" esa velocidad negativa
+        hasta que llega a 0 en el punto más alto, y luego la convierte en positiva
+        (la nave empieza a caer). Es exactamente como lanzar una pelota hacia arriba.
+
+      Relación entre los tres:
+        Tiempo hasta el pico = |IMPULSO_SALTO| / GRAVEDAD
+        Con IMPULSO = -12 y GRAVEDAD = 0.5 → pico en ~24 frames (≈ 0.4 seg a 60fps).
+        Altura máxima ≈ velY² / (2 × GRAVEDAD) = 144 / 1 = 144 px de subida.
+        Siempre ajusta GRAVEDAD y IMPULSO_SALTO juntos: si haces la gravedad más
+        fuerte sin subir el impulso, el salto quedará bajo y corto.
+    */
+    const GRAVEDAD      = 0.45; // px/frame² — controla cuán "pesada" se siente la nave
+    const IMPULSO_SALTO = -14;  // px/frame  — velocidad inicial al saltar (negativo = arriba)
+    const NAVE_ANCHO    = 50;   // ancho del placeholder en píxeles
+    const NAVE_ALTO     = 28;   // alto del placeholder en píxeles
+    const NAVE_X        = 80;   // posición X fija (el mundo avanza, la nave no)
+
+    /*
+      pisoY: coordenada Y de la línea de suelo.
+      Se recalcula en actualizarPiso() porque depende de canvas.height,
+      que cambia cuando el usuario rota el celular o redimensiona la ventana.
+    */
+    let pisoY = 0;
+
+    /*
+      nave: objeto con todo el estado móvil del personaje.
+      Equivalente en Python a: nave = {'y': 0, 'velY': 0, 'enPiso': True}
+        y       → coordenada Y del borde SUPERIOR de la nave
+        velY    → velocidad vertical actual (px/frame)
+        enPiso  → True cuando la nave toca el suelo (permite saltar)
+    */
+    let nave = { y: 0, velY: 0, enPiso: true };
+
+    /*
+      actualizarPiso(): recalcula pisoY y reposiciona la nave si estaba en el suelo.
+      Se llama desde ajustarTamano() para mantener todo coherente con el nuevo tamaño.
+    */
+    function actualizarPiso() {
+      pisoY = canvas.height - 100;
+      if (nave.enPiso) {
+        nave.y = pisoY - NAVE_ALTO; // pegar la nave al nuevo suelo inmediatamente
+      }
+    }
+
+    /*
+      actualizarFisica(): se ejecuta UNA VEZ por frame, ANTES de dibujar.
+      Aplica gravedad → mueve la nave → detecta colisión con el suelo.
+      Este patrón "actualizar estado → dibujar resultado" es el núcleo de
+      cualquier game loop, lo mismo que en pygame o cualquier motor 2D.
+    */
+    function actualizarFisica() {
+      // Paso 1 — Gravedad: cada frame la nave gana velocidad hacia abajo.
+      //   Imagina que velY empieza muy negativo (subiendo fuerte) y la gravedad
+      //   lo va empujando hacia 0 (frena la subida), luego hacia positivo (cae).
+      nave.velY += GRAVEDAD;
+
+      // Paso 2 — Movimiento: desplazamos la nave según su velocidad actual.
+      //   velY está en px/frame, así que solo sumamos. Si la nave va a 5 px/frame,
+      //   en 10 frames habrá bajado 50px — igual que posicion += velocidad en Python.
+      nave.y += nave.velY;
+
+      // Paso 3 — Colisión con el suelo.
+      //   El borde inferior de la nave es nave.y + NAVE_ALTO.
+      //   Si cruza pisoY, la "pegamos" exactamente al suelo y cancelamos velocidad.
+      //   Sin este paso, la nave atravesaría el piso y caería infinitamente.
+      if (nave.y + NAVE_ALTO >= pisoY) {
+        nave.y    = pisoY - NAVE_ALTO; // reposicionar exactamente sobre el suelo
+        nave.velY = 0;                  // cortar velocidad (sin rebote, por ahora)
+        nave.enPiso = true;
+      } else {
+        nave.enPiso = false;            // en el aire → salto deshabilitado
+      }
+    }
+
+    /*
+      dibujarPiso(): línea de suelo visual sutil.
+      La colisión real ya la maneja actualizarFisica(); esto es solo decorativo
+      para que el jugador vea dónde "aterriza" la nave.
+    */
+    function dibujarPiso() {
+      ctx.save();
+
+      // Tierra (franja marrón que llena el espacio bajo el pasto)
+      ctx.fillStyle = '#2A1A0E';
+      ctx.fillRect(0, pisoY + 10, canvas.width, canvas.height - pisoY);
+
+      // Franja base de pasto
+      ctx.fillStyle = '#3A6B2A';
+      ctx.fillRect(0, pisoY, canvas.width, 12);
+
+      // Borde superior del pasto (más claro)
+      ctx.fillStyle = '#4E8A38';
+      ctx.fillRect(0, pisoY, canvas.width, 5);
+
+      // Briznas de pasto: triángulos simples a intervalos irregulares
+      // Usamos frameContador para desplazarlas con el mundo (ilusión de scroll)
+      const offsetX = frameContador * velocidadMundo % 18;
+      ctx.fillStyle = '#62AA44';
+      for (let x = -offsetX; x < canvas.width + 18; x += 18) {
+        // Brizna izquierda
+        ctx.beginPath();
+        ctx.moveTo(x,     pisoY + 2);
+        ctx.lineTo(x + 3, pisoY - 7);
+        ctx.lineTo(x + 7, pisoY + 2);
+        ctx.fill();
+        // Brizna derecha (más corta, variación visual)
+        ctx.beginPath();
+        ctx.moveTo(x + 10, pisoY + 2);
+        ctx.lineTo(x + 13, pisoY - 4);
+        ctx.lineTo(x + 16, pisoY + 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+
+    /*
+      dibujarNave(): placeholder cian con inclinación dinámica según velY.
+
+      ¿Por qué save/restore + translate + rotate?
+        El canvas aplica transformaciones (rotar, escalar) desde un "origen" global.
+        Para rotar SOLO la nave alrededor de SU centro necesitamos:
+          1. save()             → guardar el estado actual (sin transformaciones)
+          2. translate(cx, cy)  → mover el origen al centro de la nave
+          3. rotate(angulo)     → rotar el canvas alrededor de ese nuevo origen
+          4. fillRect(...)      → dibujar el rect centrado en (0,0) del origen movido
+          5. restore()          → devolver todo al estado guardado en el paso 1
+        Sin save/restore, la rotación se acumularía frame a frame y giraría sin parar.
+
+      Inclinación según velY:
+        velY negativo (subiendo) → ángulo negativo → nose hacia arriba  ↗
+        velY positivo (cayendo)  → ángulo positivo → nose hacia abajo   ↘
+        Factor 0.04 convierte px/frame a radianes. Math.max/min lo limita a
+        ±0.44 rad (≈ ±25°) para que la inclinación no sea exagerada.
+    */
+    // dibujarCastor acepta coordenadas externas → permite reutilizarlo en el cap2
+    function dibujarCastor(x, y, velY, enPiso) {
+      const cx = x + NAVE_ANCHO / 2;
+      const cy = y + NAVE_ALTO / 2;
+      const angulo = Math.max(-0.44, Math.min(0.44, velY * 0.04));
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(angulo);
+
+      const C1 = '#5C3D1E';
+      const C2 = '#8B5E3C';
+      const C3 = '#C4956A';
+      const BL = '#F5F0E8';
+      const NE = '#0D0800';
+
+      const corriendo = enPiso && estadoJuego === 'JUGANDO';
+      const pata = corriendo
+        ? Math.sin(frameContador * 0.45) * 4
+        : (velY < 0 ? -4 : 3);
+
+      // Cola plana de castor (oval horizontal, atrás/izquierda)
+      ctx.fillStyle = C1;
+      ctx.beginPath();
+      ctx.ellipse(-22, 7, 9, 5, 0.15, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Cuerpo (oval)
+      ctx.fillStyle = C2;
+      ctx.beginPath();
+      ctx.ellipse(-4, 1, 14, 10, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Panza más clara
+      ctx.fillStyle = C3;
+      ctx.beginPath();
+      ctx.ellipse(-4, 3, 8, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Pata trasera y delantera
+      ctx.fillStyle = C1;
+      ctx.fillRect(-12, 9, 6, 7 + pata);
+      ctx.fillRect(  1, 9, 6, 7 - pata);
+
+      // Cabeza (círculo derecho)
+      ctx.fillStyle = C2;
+      ctx.beginPath();
+      ctx.arc(14, -3, 11, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Oreja
+      ctx.fillStyle = C1;
+      ctx.beginPath();
+      ctx.ellipse(9, -13, 5, 4, -0.3, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Ojo blanco + pupila
+      ctx.fillStyle = BL;
+      ctx.beginPath();
+      ctx.arc(19, -5, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = NE;
+      ctx.beginPath();
+      ctx.arc(20, -5, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Nariz
+      ctx.fillStyle = C1;
+      ctx.beginPath();
+      ctx.ellipse(24, -1, 2.5, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Dientes de castor (dos rectángulos con separador)
+      ctx.fillStyle = BL;
+      ctx.fillRect(21, 2, 3, 5);
+      ctx.fillRect(25, 2, 3, 5);
+      ctx.fillStyle = C3;
+      ctx.fillRect(24, 2, 1, 5);
+
+      ctx.restore();
+    }
+
+    // Wrapper fino para el juego normal
+    function dibujarNave() {
+      dibujarCastor(NAVE_X, nave.y, nave.velY, nave.enPiso);
+    }
+
+
+    // ─── CIELO DINÁMICO (DÍA / NOCHE) ────────────────────────────────────────────
+    /*
+      El cielo cambia de color gradualmente a lo largo de la partida, siguiendo
+      un ciclo de 90 segundos (CICLO_DURACION frames). La variable 't' (0→1)
+      representa la posición en ese ciclo:
+        0.00 – 0.15  noche
+        0.15 – 0.30  amanecer (naranja/rosa)
+        0.30 – 0.60  día (azul claro, sol visible)
+        0.60 – 0.80  atardecer (naranja/rojo)
+        0.80 – 1.00  noche otra vez
+
+      Técnica: interpolación lineal entre keyframes de color RGB.
+        color_final = c1 + (c2 - c1) × f   (donde f ∈ [0,1])
+      Es la misma idea que una "animación de tweening" en cualquier motor 2D.
+    */
+    const CICLO_DURACION = 5400; // frames por ciclo (~90 seg a 60fps)
+
+    const CIELO_KF = [
+      { t: 0.00, top: [ 5,  6, 10], bot: [21, 11,  46] }, // noche
+      { t: 0.15, top: [12,  5, 25], bot: [50, 18,  65] }, // noche tardía
+      { t: 0.25, top: [65, 25, 20], bot: [185, 80, 40] }, // amanecer
+      { t: 0.38, top: [80,130,200], bot: [160,200, 230] }, // mañana
+      { t: 0.55, top: [35, 95,185], bot: [110,165, 215] }, // mediodía
+      { t: 0.68, top: [75, 50, 15], bot: [210,110,  45] }, // atardecer
+      { t: 0.82, top: [25,  8, 30], bot: [75, 20,  60]  }, // crepúsculo
+      { t: 1.00, top: [ 5,  6, 10], bot: [21, 11,  46]  }, // noche
+    ];
+
+    function lerpRGB(c1, c2, f) {
+      return [
+        Math.round(c1[0] + (c2[0] - c1[0]) * f),
+        Math.round(c1[1] + (c2[1] - c1[1]) * f),
+        Math.round(c1[2] + (c2[2] - c1[2]) * f),
+      ];
+    }
+
+    function getColorCielo(t) {
+      for (let i = 0; i < CIELO_KF.length - 1; i++) {
+        const k1 = CIELO_KF[i], k2 = CIELO_KF[i + 1];
+        if (t >= k1.t && t <= k2.t) {
+          const f   = (t - k1.t) / (k2.t - k1.t);
+          const top = lerpRGB(k1.top, k2.top, f);
+          const bot = lerpRGB(k1.bot, k2.bot, f);
+          return {
+            top: `rgb(${top[0]},${top[1]},${top[2]})`,
+            bot: `rgb(${bot[0]},${bot[1]},${bot[2]})`,
+          };
+        }
+      }
+      return { top: 'rgb(5,6,10)', bot: 'rgb(21,11,46)' };
+    }
+
+    function dibujarCielo() {
+      // t = posición en el ciclo. forzarAtardecer lo fija en el dorado del cap2.
+      const t = forzarAtardecer ? 0.65 : (score % CICLO_DURACION) / CICLO_DURACION;
+
+      // Estrellas: brillantes de noche, invisibles de día, transición gradual
+      if      (t < 0.20) alfaEstrellas = 0.7;
+      else if (t < 0.27) alfaEstrellas = 0.7 * (1 - (t - 0.20) / 0.07);
+      else if (t < 0.67) alfaEstrellas = 0;
+      else if (t < 0.80) alfaEstrellas = 0.7 * (t - 0.67) / 0.13;
+      else               alfaEstrellas = 0.7;
+
+      // Fondo degradado de arriba a abajo (cubre el fondo CSS)
+      const { top, bot } = getColorCielo(t);
+      const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      grad.addColorStop(0, top);
+      grad.addColorStop(1, bot);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Sol — visible de t=0.20 a t=0.80, con fade en los bordes
+      if (t >= 0.20 && t <= 0.80) {
+        const opa  = Math.min(1, Math.min((t - 0.20) / 0.12, (0.80 - t) / 0.12));
+        const prog = (t - 0.20) / 0.60; // 0 al amanecer, 1 al anochecer
+        // Arco parabólico: empieza a la derecha, sube al centro, baja a la izquierda
+        const solX = canvas.width  * (0.85 - prog * 0.65);
+        const solY = canvas.height * (0.38  - 0.26 * Math.sin(prog * Math.PI));
+
+        ctx.save();
+        ctx.globalAlpha = opa;
+
+        // Halo difuso (radial gradient)
+        const halo = ctx.createRadialGradient(solX, solY, 22, solX, solY, 75);
+        halo.addColorStop(0, 'rgba(255,230,100,0.45)');
+        halo.addColorStop(1, 'rgba(255,200, 50, 0)');
+        ctx.fillStyle = halo;
+        ctx.beginPath();
+        ctx.arc(solX, solY, 75, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Disco solar
+        ctx.shadowColor = '#FFD700';
+        ctx.shadowBlur  = 20;
+        ctx.fillStyle   = '#FFE055';
+        ctx.beginPath();
+        ctx.arc(solX, solY, 22, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        ctx.restore();
+      }
+    }
+
+
+    // ─── OBSTÁCULOS Y DIFICULTAD PROGRESIVA ──────────────────────────────────────
+    /*
+      velocidadMundo es la variable central de la dificultad: controla qué tan
+      rápido avanzan los obstáculos. Se calcula con raíz cuadrada del score:
+        velocidad = BASE + √score × 0.05
+
+      ¿Por qué raíz cuadrada y no lineal?
+        Con escala lineal (score × k), la dificultad sube para siempre al mismo
+        ritmo — injusto para el jugador nuevo y aburrido para el experto.
+        Con √score, la dificultad sube rápido al principio (curva de aprendizaje)
+        y se aplana en niveles altos. Así el juego siempre está en el "borde
+        del desafío" sin sentirse imposible.
+
+      Dos tipos de obstáculos según su posición:
+        'piso'  → crece desde el suelo    → señal ROSA  → HAY QUE SALTAR
+        'techo' → cuelga desde el techo   → señal DORADA → HAY QUE QUEDARSE ABAJO
+
+      Los de techo solo aparecen pasada cierta velocidad, cuando el jugador
+      ya aprendió a saltar. Nunca dos techos seguidos (sin tiempo de reacción).
+    */
+    const VEL_MUNDO_BASE = 2.0; // px/frame al inicio del juego
+    const VEL_MUNDO_MAX  = 6;   // px/frame máximo alcanzable
+    const OBS_ANCHO      = 40;  // ancho fijo de todos los obstáculos en px
+
+    let velocidadMundo     = VEL_MUNDO_BASE;
+    let obstaculos         = [];
+    let framesSiguienteObs = 200; // gracia inicial: ~3.3 segundos para reaccionar
+    let ultimoTipoObs      = 'piso'; // evita dos techos seguidos
+
+    function elegirTipoObstaculo() {
+      if (velocidadMundo < 4.0)      return 'piso'; // primeros ~27 seg: solo piso
+      if (ultimoTipoObs === 'techo') return 'piso'; // nunca dos techos consecutivos
+      return Math.random() < 0.35 ? 'techo' : 'piso';
+    }
+
+    function spawnObstaculo() {
+      const tipo = elegirTipoObstaculo();
+      ultimoTipoObs = tipo;
+
+      if (tipo === 'piso') {
+        /*
+          Obstáculo de piso: altura que crece con la velocidad del mundo.
+          Al inicio (vel=3.5): max ~56px — muy fácil de saltar.
+          En velocidad máxima (vel=9): max 105px — desafiante pero siempre superable
+          (el salto sube ~218px, así que sobran más de 100px de margen).
+        */
+        const maxAlto = Math.min(105, 30 + velocidadMundo * 7.5);
+        const alto    = 35 + Math.random() * (maxAlto - 35);
+        obstaculos.push({ tipo, x: canvas.width + 10, y: pisoY - alto, alto });
+
+      } else {
+        /*
+          Obstáculo de techo: cuelga desde y=0 hacia abajo.
+          Su borde inferior debe quedar en la "zona de peligro" del salto:
+            por DEBAJO del pico de la nave saltando  → colisiona al saltar
+            por ENCIMA de la nave en el suelo        → no colisiona si te quedas abajo
+
+          jumpHeight = v₀² / (2g): altura máxima del salto en píxeles.
+          peakNavTop: coordenada Y más alta que alcanza el borde superior de la nave.
+          La colisión ocurre cuando navY < obs.alto (nave sube más que el obstáculo baja).
+        */
+        const jumpHeight = (IMPULSO_SALTO * IMPULSO_SALTO) / (2 * GRAVEDAD);
+        const peakNavTop = pisoY - NAVE_ALTO - jumpHeight;
+        const minAlto    = peakNavTop + 30;            // 30px por debajo del pico
+        const maxAlto    = pisoY - NAVE_ALTO - 30;     // 30px sobre la nave en piso
+        const alto       = minAlto + Math.random() * (maxAlto - minAlto);
+        obstaculos.push({ tipo, x: canvas.width + 10, y: 0, alto });
+      }
+    }
+
+    function actualizarObstaculos() {
+      framesSiguienteObs--;
+      if (framesSiguienteObs <= 0) {
+        spawnObstaculo();
+        /*
+          Intervalo inversamente proporcional a la velocidad: cuanto más rápido
+          va el mundo, más seguido aparecen obstáculos (el espacio "se acorta").
+          Math.max(50,...) garantiza un mínimo de 50 frames entre obstáculos.
+        */
+        const base = Math.max(50, Math.round(140 - velocidadMundo * 10));
+        framesSiguienteObs = base + Math.floor(Math.random() * 40);
+      }
+
+      for (let i = obstaculos.length - 1; i >= 0; i--) {
+        obstaculos[i].x -= velocidadMundo; // todos se mueven a la velocidad actual
+        if (obstaculos[i].x + OBS_ANCHO < 0) obstaculos.splice(i, 1);
+      }
+    }
+
+    function dibujarObstaculos() {
+      obstaculos.forEach(obs => {
+        ctx.save();
+        if (obs.tipo === 'piso') {
+          ctx.fillStyle   = '#6B4226'; // tronco: "salta sobre mí"
+          ctx.shadowColor = '#8B5E3C';
+        } else {
+          ctx.fillStyle   = '#3A6B2A'; // rama: "quédate abajo"
+          ctx.shadowColor = '#5D9E4A';
+        }
+        ctx.shadowBlur = 10;
+        ctx.fillRect(obs.x, obs.y, OBS_ANCHO, obs.alto);
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      });
+    }
+
+    /*
+      AABB funciona igual para ambos tipos de obstáculo — las coordenadas
+      y/alto ya están correctamente seteadas en spawnObstaculo().
+    */
+    const MARGEN_HITBOX = 4;
+
+    function detectarColision() {
+      const nX = NAVE_X     + MARGEN_HITBOX;
+      const nY = nave.y     + MARGEN_HITBOX;
+      const nW = NAVE_ANCHO - MARGEN_HITBOX * 2;
+      const nH = NAVE_ALTO  - MARGEN_HITBOX * 2;
+
+      for (const obs of obstaculos) {
+        const sepX = nX + nW < obs.x  ||  nX > obs.x + OBS_ANCHO;
+        const sepY = nY + nH < obs.y  ||  nY > obs.y + obs.alto;
+        if (!sepX && !sepY) return true;
+      }
+      return false;
+    }
+
+
+    // ─── SCORE ───────────────────────────────────────────────────────────────────
+    /*
+      score sube 1 por frame mientras el juego está activo.
+      A 60fps eso es 60 puntos/segundo. Lo mostramos como "metros" — una medida
+      relativa que sirve para comparar partidas entre sí, no para ser realista.
+    */
+    let score = 0;
+
+    function dibujarScore() {
+      ctx.save();
+      ctx.textAlign   = 'center';
+
+      // Número grande centrado
+      ctx.font        = '700 38px "Orbitron", sans-serif';
+      ctx.fillStyle   = '#E8F1FF';
+      ctx.shadowColor = '#00E5FF';
+      ctx.shadowBlur  = 18;
+      ctx.fillText(Math.floor(score), canvas.width / 2, 100);
+
+      // Etiqueta pequeña debajo
+      ctx.font        = '500 14px "Orbitron", sans-serif';
+      ctx.fillStyle   = '#00E5FF';
+      ctx.shadowBlur  = 6;
+      ctx.fillText('M E T R O S', canvas.width / 2, 120);
+
+      ctx.restore();
+    }
+
+
+    // ─── ESTADOS DEL JUEGO ───────────────────────────────────────────────────────
+    /*
+      estadoJuego: máquina de estados del juego. Siempre está en uno de tres estados:
+        'INICIO'    → menú de bienvenida, nave flotando, esperando que el jugador toque
+        'JUGANDO'   → física activa, obstáculos se mueven, score sube
+        'GAME_OVER' → todo congelado, overlay con puntaje final
+    */
+    let estadoJuego  = 'INICIO';
+    let frameContador = 0; // contador global de frames, usado para animaciones de menú
+
+    // ─── CAPÍTULO 2 — LA PROPUESTA ───────────────────────────────────────────────
+    // localStorage guarda valores entre sesiones (como un dict persistente en el navegador)
+    let partidasJugadas   = parseInt(localStorage.getItem('hopper_partidas') || '0');
+    let propuestaAceptada = localStorage.getItem('hopper_si') === 'true';
+
+    let estadoCap2      = 'INTRO';  // INTRO | CAMINANDO | PROPUESTA | CELEBRACION
+    let cap2Frame       = 0;
+    let cap2BeaverX     = 0;        // posición X del castor durante la escena
+    let forzarAtardecer = false;    // congela el cielo en dorado durante cap2
+    let corazones       = [];
+    let btnNoPosX       = 0;        // posición del botón NO (huye al intentar tocarlo)
+    let btnNoPosY       = 0;
+
+    function dibujarGameOver() {
+      // Overlay semi-transparente — deja ver el mundo congelado debajo
+      ctx.save();
+      ctx.fillStyle = 'rgba(5, 6, 10, 0.78)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const cx = canvas.width  / 2;
+      const cy = canvas.height / 2;
+      ctx.textAlign = 'center';
+
+      ctx.font        = '700 24px "Orbitron", sans-serif';
+      ctx.fillStyle   = '#FF2E92';
+      ctx.shadowColor = '#FF2E92';
+      ctx.shadowBlur  = 18;
+      ctx.fillText('TU HOPPER FUE DESTRUIDO', cx, cy - 30);
+
+      ctx.font        = '500 26px "Orbitron", sans-serif';
+      ctx.fillStyle   = '#FFD166';
+      ctx.shadowColor = '#FFD166';
+      ctx.shadowBlur  = 10;
+      ctx.fillText(Math.floor(score) + ' m', cx, cy + 18);
+
+      ctx.font        = '600 18px "Rajdhani", sans-serif';
+      ctx.fillStyle   = '#E8F1FF';
+      ctx.shadowBlur  = 0;
+      ctx.fillText('TOCA PARA REINICIAR', cx, cy + 58);
+
+      ctx.restore();
+    }
+
+    function dibujarMenuInicio() {
+      ctx.save();
+      // Overlay más suave que el de game over: deja ver las estrellas y la nave flotando
+      ctx.fillStyle = 'rgba(5, 6, 10, 0.62)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const cx = canvas.width  / 2;
+      const cy = canvas.height / 2 - 10;
+      ctx.textAlign = 'center';
+
+      // Título principal
+      ctx.font        = '900 50px "Orbitron", sans-serif';
+      ctx.fillStyle   = '#E8F1FF';
+      ctx.shadowColor = '#00E5FF';
+      ctx.shadowBlur  = 28;
+      ctx.fillText('H O P P E R', cx, cy - 44);
+
+      // Subtítulo
+      ctx.font        = '500 15px "Orbitron", sans-serif';
+      ctx.fillStyle   = '#00E5FF';
+      ctx.shadowBlur  = 8;
+      ctx.fillText('A V E N T U R A   S I N   F I N', cx, cy - 6);
+
+      // Separador decorativo tipo HUD
+      ctx.shadowBlur  = 0;
+      ctx.strokeStyle = 'rgba(0, 229, 255, 0.35)';
+      ctx.lineWidth   = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx - 90, cy + 18);
+      ctx.lineTo(cx + 90, cy + 18);
+      ctx.stroke();
+
+      /*
+        Efecto de pulso con Math.sin: el valor oscila entre -1 y 1 a lo largo del tiempo.
+        Al sumar 0.5 y multiplicar por 0.5 lo convertimos al rango [0, 1].
+        Luego lo usamos como globalAlpha para que el texto aparezca y desaparezca suavemente.
+        frameContador * 0.07 controla la velocidad del pulso: más alto = más rápido.
+      */
+      const pulso = 0.5 + 0.5 * Math.sin(frameContador * 0.07);
+      ctx.globalAlpha = 0.35 + 0.65 * pulso;
+      ctx.font        = '600 19px "Rajdhani", sans-serif';
+      ctx.fillStyle   = '#E8F1FF';
+      ctx.shadowColor = '#E8F1FF';
+      ctx.shadowBlur  = 4;
+      ctx.fillText('TOCA PARA COMENZAR', cx, cy + 58);
+      ctx.globalAlpha = 1;
+
+      ctx.restore();
+    }
+
+    function reiniciarJuego() {
+      score              = 0;
+      velocidadMundo     = VEL_MUNDO_BASE;
+      ultimoTipoObs      = 'piso';
+      obstaculos         = [];
+      framesSiguienteObs = 200;
+      nave.velY          = 0;
+      nave.enPiso        = true;
+      nave.y             = pisoY - NAVE_ALTO;
+      estadoJuego        = 'JUGANDO';
+    }
+
+
+    // ─── CAPÍTULO 2 — FUNCIONES ──────────────────────────────────────────────────
+    function reposicionarNo() {
+      const cx = canvas.width / 2, cy = canvas.height / 2;
+      let nx, ny, intentos = 0;
+      do {
+        nx = 60 + Math.random() * (canvas.width  - 180);
+        ny = cy  + Math.random() * (canvas.height * 0.28);
+        intentos++;
+      } while (intentos < 20 && Math.abs(nx - cx) < 120 && Math.abs(ny - (cy + 55)) < 70);
+      btnNoPosX = nx;
+      btnNoPosY = ny;
+    }
+
+    function iniciarCapitulo2() {
+      estadoJuego     = 'CAPITULO_2';
+      estadoCap2      = 'INTRO';
+      cap2Frame       = 0;
+      cap2BeaverX     = NAVE_X;
+      forzarAtardecer = true;
+      corazones       = [];
+    }
+
+    function iniciarCelebracion() {
+      estadoCap2 = 'CELEBRACION';
+      cap2Frame  = 0;
+      corazones  = [];
+      const colores = ['#FF2E92','#FF6BAD','#FFD166','#FF8C69','#FFB347'];
+      for (let i = 0; i < 45; i++) {
+        corazones.push({
+          x:     Math.random() * canvas.width,
+          y:    -30 - Math.random() * canvas.height,
+          vel:   1.2 + Math.random() * 2.5,
+          size:  16 + Math.random() * 28,
+          color: colores[i % 5],
+          swing: Math.random() * Math.PI * 2,
+        });
+      }
+      localStorage.setItem('hopper_si', 'true');
+      propuestaAceptada = true;
+    }
+
+    // Dibuja a Hopper centrado en (cx, cy) con escala arbitraria
+    function dibujarCastorEn3D(cx, cy, escala, velY, enPiso) {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(escala, escala);
+      dibujarCastor(-NAVE_ANCHO / 2, -NAVE_ALTO / 2, velY, enPiso);
+      ctx.restore();
+    }
+
+    // Elena: Hopper con lazo rosa
+    function dibujarElena(cx, cy, escala) {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(escala, escala);
+      dibujarCastor(-NAVE_ANCHO / 2, -NAVE_ALTO / 2, 0, true);
+      ctx.fillStyle = '#FF2E92';
+      ctx.beginPath(); ctx.moveTo(-7, -23); ctx.lineTo(-2, -19); ctx.lineTo(-7, -15); ctx.fill();
+      ctx.beginPath(); ctx.moveTo( 3, -23); ctx.lineTo(-2, -19); ctx.lineTo( 3, -15); ctx.fill();
+      ctx.fillStyle = '#FF6BAD';
+      ctx.beginPath(); ctx.arc(-2, -19, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    // Fondo: sendero en perspectiva con atardecer
+    function dibujarEscenaCamino() {
+      const vpX      = canvas.width / 2;
+      const horizonY = canvas.height * 0.58;
+
+      const sky = ctx.createLinearGradient(0, 0, 0, horizonY);
+      sky.addColorStop(0,    '#18082E');
+      sky.addColorStop(0.45, '#8B2E10');
+      sky.addColorStop(1,    '#E87020');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, canvas.width, horizonY);
+
+      ctx.save();
+      ctx.shadowColor = '#FFD166'; ctx.shadowBlur = 45;
+      ctx.fillStyle   = '#FFE566';
+      ctx.beginPath(); ctx.arc(vpX, horizonY, 22, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0; ctx.restore();
+
+      const suelo = ctx.createLinearGradient(0, horizonY, 0, canvas.height);
+      suelo.addColorStop(0, '#5DA840');
+      suelo.addColorStop(1, '#2C5018');
+      ctx.fillStyle = suelo;
+      ctx.fillRect(0, horizonY, canvas.width, canvas.height - horizonY);
+
+      // Sendero de tierra (trapecio perspectiva)
+      ctx.fillStyle = '#A0825A';
+      ctx.beginPath();
+      ctx.moveTo(canvas.width * 0.08, canvas.height);
+      ctx.lineTo(canvas.width * 0.92, canvas.height);
+      ctx.lineTo(vpX + 14, horizonY + 1);
+      ctx.lineTo(vpX - 14, horizonY + 1);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = '#8B6B45'; ctx.lineWidth = 1;
+      for (let i = 1; i <= 8; i++) {
+        const t  = i / 9;
+        const yp = horizonY + (canvas.height - horizonY) * (t * t);
+        const hw = (canvas.width * 0.42) * (t * t);
+        ctx.globalAlpha = t * 0.5;
+        ctx.beginPath(); ctx.moveTo(vpX - hw, yp); ctx.lineTo(vpX + hw, yp); ctx.stroke();
+      }
+      ctx.globalAlpha = 1; ctx.lineWidth = 1;
+
+      // Árboles laterales
+      for (let i = 0; i < 5; i++) {
+        const t   = (i + 1) / 6.5;
+        const ty  = horizonY + (canvas.height - horizonY) * (t * t);
+        const th  = 55 * t, tw = 9 * t;
+        const pad = (canvas.width * 0.42) * (t * t) + 12 * t;
+        ctx.fillStyle = '#3D2008';
+        ctx.fillRect(vpX - pad - tw, ty - th, tw, th);
+        ctx.fillStyle = '#2E6020';
+        ctx.beginPath(); ctx.arc(vpX - pad - tw * 0.5, ty - th, tw * 2.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#3D2008';
+        ctx.fillRect(vpX + pad, ty - th, tw, th);
+        ctx.fillStyle = '#2E6020';
+        ctx.beginPath(); ctx.arc(vpX + pad + tw * 0.5, ty - th, tw * 2.2, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    // Casa pequeña con puerta animada y Elena saliendo
+    function dibujarCasaConPuerta(doorProgress, elenaOffset) {
+      const vpX      = canvas.width  / 2;
+      const horizonY = canvas.height * 0.58;
+      const ESC      = 0.72;
+      const casaW    = 72 * ESC, casaH = 66 * ESC;
+      const baseY    = horizonY + 1;
+
+      ctx.fillStyle = '#D4B896';
+      ctx.fillRect(vpX - casaW / 2, baseY - casaH, casaW, casaH);
+
+      ctx.fillStyle = '#6B3A1E';
+      ctx.beginPath();
+      ctx.moveTo(vpX - casaW / 2 - 4 * ESC, baseY - casaH);
+      ctx.lineTo(vpX, baseY - casaH - 30 * ESC);
+      ctx.lineTo(vpX + casaW / 2 + 4 * ESC, baseY - casaH);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#F0D890';
+      ctx.fillRect(vpX + 8 * ESC, baseY - casaH + 11 * ESC, 15 * ESC, 12 * ESC);
+      ctx.strokeStyle = '#8B5E3C'; ctx.lineWidth = 1;
+      ctx.strokeRect(vpX + 8 * ESC, baseY - casaH + 11 * ESC, 15 * ESC, 12 * ESC);
+
+      const dW = 22 * ESC, dH = 38 * ESC;
+      const dX = vpX - dW / 2, dY = baseY - dH;
+      // Interior: oscuro si cerrada, cálido y con detalles si se abre
+      if (doorProgress > 0) {
+        const iGrad = ctx.createLinearGradient(dX, dY, dX + dW, dY + dH);
+        iGrad.addColorStop(0, '#C86820');
+        iGrad.addColorStop(1, '#6A3010');
+        ctx.fillStyle = iGrad;
+        ctx.fillRect(dX, dY, dW, dH);
+        ctx.fillStyle = '#5C3010';
+        ctx.fillRect(dX, dY + dH * 0.72, dW, dH * 0.28);
+        ctx.fillStyle = 'rgba(255,200,80,0.35)';
+        ctx.fillRect(dX + dW * 0.55, dY + dH * 0.15, dW * 0.38, dH * 0.28);
+      } else {
+        ctx.fillStyle = '#1A0808';
+        ctx.fillRect(dX, dY, dW, dH);
+      }
+
+      if (doorProgress < 1) {
+        const visW = dW * (1 - doorProgress * 0.92);
+        ctx.fillStyle = '#8B4513';
+        ctx.fillRect(dX, dY, visW, dH);
+        ctx.fillStyle = '#FFD166';
+        ctx.beginPath(); ctx.arc(dX + visW - 3 * ESC, dY + dH * 0.55, 2 * ESC, 0, Math.PI * 2); ctx.fill();
+      }
+
+      if (elenaOffset > 0) {
+        const esc2   = (0.28 + elenaOffset * 0.06) * ESC;
+        const elenaX = vpX + dW * 0.1;
+        const elenaY = baseY - 4 * ESC + elenaOffset * 8;
+        dibujarElena(elenaX, elenaY, esc2);
+      }
+    }
+
+    function dibujarTocaContinuar() {
+      const pulso = 0.50 + 0.50 * Math.sin(frameContador * 0.09);
+      ctx.save();
+      ctx.globalAlpha = pulso;
+      ctx.textAlign   = 'center';
+      ctx.font        = '600 19px "Rajdhani", sans-serif';
+      ctx.fillStyle   = '#E8F1FF';
+      ctx.shadowColor = 'rgba(200,220,255,0.8)';
+      ctx.shadowBlur  = 10;
+      ctx.fillText('✦  TOCA PARA CONTINUAR  ✦', canvas.width / 2, canvas.height - 48);
+      ctx.shadowBlur  = 0;
+      ctx.restore();
+    }
+
+    function dibujarCloseUpPuerta(f) {
+      const cxP     = canvas.width / 2;
+      const fadein  = Math.min(1, f / 15);
+      const doorOpen = f >= 100 ? Math.min(1, (f - 100) / 80) : 0;
+      const elenaOK  = f >= 200 ? Math.min(1, (f - 200) / 60) : 0;
+      const fadeout  = f >= 340 ? Math.min(1, (f - 340) / 40) : 0;
+
+      ctx.save();
+      // dark overlay
+      ctx.globalAlpha = fadein * 0.94 * (1 - fadeout);
+      ctx.fillStyle   = '#0A0514';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const baseAlpha = fadein * (1 - fadeout);
+      ctx.globalAlpha = baseAlpha;
+
+      const pH = canvas.height * 0.66;
+      const pW = Math.min(canvas.width * 0.78, pH * 0.62);
+      const pX = cxP - pW / 2;
+      const pY = canvas.height * 0.13;
+
+      // door frame (stone surround)
+      ctx.fillStyle = '#5A3008';
+      ctx.beginPath();
+      ctx.roundRect(pX - 14, pY - 10, pW + 28, pH + 20, 6);
+      ctx.fill();
+
+      // warm interior (fills behind door)
+      if (doorOpen > 0) {
+        ctx.save();
+        const ig = ctx.createLinearGradient(pX, pY, pX + pW, pY + pH);
+        ig.addColorStop(0, '#D07030');
+        ig.addColorStop(1, '#6A3010');
+        ctx.fillStyle = ig;
+        ctx.beginPath();
+        ctx.roundRect(pX, pY, pW, pH, 4);
+        ctx.fill();
+        // floor
+        ctx.fillStyle = '#5C3010';
+        ctx.fillRect(pX, pY + pH * 0.72, pW, pH * 0.28);
+        // window glow
+        if (doorOpen > 0.3) {
+          ctx.globalAlpha *= (doorOpen - 0.3) / 0.7;
+          ctx.fillStyle    = 'rgba(255,210,90,0.40)';
+          ctx.fillRect(pX + pW * 0.12, pY + pH * 0.14, pW * 0.33, pH * 0.30);
+        }
+        ctx.restore();
+      }
+
+      // door panel squishes open (perspective: left edge stays, right edge collapses)
+      if (doorOpen < 1) {
+        const dW = pW * (1 - doorOpen * 0.93);
+        ctx.save();
+        const dg = ctx.createLinearGradient(pX, 0, pX + dW, 0);
+        dg.addColorStop(0, '#7A4010');
+        dg.addColorStop(0.5, '#A85C20');
+        dg.addColorStop(1, '#6A380C');
+        ctx.fillStyle = dg;
+        ctx.beginPath();
+        ctx.roundRect(pX, pY, dW, pH, 4);
+        ctx.fill();
+        // knob
+        ctx.fillStyle   = '#FFCC44';
+        ctx.shadowColor = '#FFD700';
+        ctx.shadowBlur  = 6;
+        ctx.beginPath();
+        ctx.arc(pX + dW * 0.72, pY + pH * 0.52, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        // panel grooves
+        ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+        ctx.lineWidth   = 2;
+        ctx.beginPath();
+        ctx.roundRect(pX + 14, pY + 14, dW - 28, pH * 0.38, 3);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.roundRect(pX + 14, pY + pH * 0.48, dW - 28, pH * 0.36, 3);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Elena appears in doorway
+      if (elenaOK > 0 && doorOpen > 0.4) {
+        ctx.save();
+        ctx.globalAlpha *= elenaOK;
+        dibujarElena(cxP + pW * 0.08, pY + pH * 0.74, 1.15);
+        ctx.restore();
+      }
+
+      // Hopper knocking at left side of door
+      const kBounce = f < 120 ? Math.abs(Math.sin(f * 0.42)) * 14 : 0;
+      ctx.save();
+      ctx.translate(pX - 18, pY + pH * 0.74 - kBounce);
+      ctx.scale(1.12, 1.12);
+      dibujarCastor(-NAVE_ANCHO / 2, -NAVE_ALTO / 2, 0, true);
+      ctx.restore();
+
+      // impact stars on knock
+      if (f < 120 && Math.floor(f / 20) % 2 === 0) {
+        const sX = pX + 20;
+        const sY = pY + pH * 0.42;
+        const pulse = 1 + 0.3 * Math.sin(f * 0.38);
+        ctx.save();
+        ctx.strokeStyle = '#FFEE44';
+        ctx.lineWidth   = 2.2;
+        for (let i = 0; i < 8; i++) {
+          const ang = (i / 8) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.moveTo(sX + Math.cos(ang) * 7  * pulse, sY + Math.sin(ang) * 7  * pulse);
+          ctx.lineTo(sX + Math.cos(ang) * 18 * pulse, sY + Math.sin(ang) * 18 * pulse);
+          ctx.stroke();
+        }
+        ctx.fillStyle = '#FFEE44';
+        ctx.beginPath();
+        ctx.arc(sX, sY, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // TOC TOC text
+      ctx.textAlign = 'center';
+      if (f < 120) {
+        const blink = Math.floor(f / 18) % 2 === 0;
+        ctx.save();
+        ctx.globalAlpha = baseAlpha * (blink ? 0.95 : 0.20);
+        ctx.font        = '700 22px "Orbitron", sans-serif';
+        ctx.fillStyle   = '#FFD166';
+        ctx.shadowColor = '#FFD166';
+        ctx.shadowBlur  = 18;
+        ctx.fillText('¡TOC  TOC!', cxP, pY - 18);
+        ctx.shadowBlur  = 0;
+        ctx.restore();
+      }
+
+      // ¡Hopper! from Elena
+      if (elenaOK > 0.5) {
+        ctx.save();
+        ctx.globalAlpha = baseAlpha * Math.min(1, (elenaOK - 0.5) * 2);
+        ctx.font        = '700 20px "Orbitron", sans-serif';
+        ctx.fillStyle   = '#FFE8F5';
+        ctx.shadowColor = '#FF2E92';
+        ctx.shadowBlur  = 14;
+        ctx.fillText('¡Hopper!', cxP, pY - 18);
+        ctx.shadowBlur  = 0;
+        ctx.restore();
+      }
+
+      // final fade to black
+      if (fadeout > 0) {
+        ctx.globalAlpha = fadeout;
+        ctx.fillStyle   = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+
+      ctx.restore();
+    }
+
+    function actualizarCapitulo2() {
+      cap2Frame++;
+
+      // INTRO_CORRE: hopper corre tras el tap, no avanza solo
+      if (estadoCap2 === 'INTRO_CORRE') {
+        cap2BeaverX += velocidadMundo * 2.0;
+        if (cap2BeaverX > canvas.width + NAVE_ANCHO + 20) {
+          estadoCap2 = 'FADE';
+          cap2Frame  = 0;
+        }
+      }
+
+      if (estadoCap2 === 'FADE') {
+        if (cap2Frame > 55) {
+          estadoCap2 = 'CAMINO';
+          cap2Frame  = 0;
+        }
+      }
+
+      if (estadoCap2 === 'CAMINO') {
+        if (cap2Frame > 660) {
+          estadoCap2 = 'PROPUESTA';
+          cap2Frame  = 0;
+        }
+      }
+
+      if (estadoCap2 === 'CELEBRACION' || estadoCap2 === 'FINAL') {
+        corazones.forEach(c => {
+          c.y += c.vel;
+          c.x += Math.sin(frameContador * 0.06 + c.swing) * 0.8;
+          if (c.y > canvas.height + 40) { c.y = -40; c.x = Math.random() * canvas.width; }
+        });
+      }
+
+      if (estadoCap2 === 'CELEBRACION') {
+        if (cap2Frame > 280) {
+          estadoCap2 = 'FINAL';
+          cap2Frame  = 0;
+        }
+      }
+    }
+
+    function dibujarCapitulo2() {
+      const cx       = canvas.width  / 2;
+      const cy       = canvas.height / 2;
+      const horizonY = canvas.height * 0.58;
+      ctx.save();
+      ctx.textAlign = 'center';
+
+      // ── INTRO: hopper quieto, texto aparece, espera tap ──
+      if (estadoCap2 === 'INTRO') {
+        dibujarCastor(cap2BeaverX, pisoY - NAVE_ALTO, 0, true);
+
+        const a1 = Math.min(1, cap2Frame / 45);
+        ctx.globalAlpha = a1;
+        ctx.font        = '700 36px "Orbitron", sans-serif';
+        ctx.fillStyle   = '#FFD166';
+        ctx.shadowColor = '#FFD166'; ctx.shadowBlur = 18;
+        ctx.fillText('Elena...', cx, cy - 25);
+        ctx.shadowBlur  = 0;
+
+        if (cap2Frame > 75) {
+          ctx.globalAlpha = Math.min(1, (cap2Frame - 75) / 45);
+          ctx.font        = '500 22px "Rajdhani", sans-serif';
+          ctx.fillStyle   = '#E8F1FF';
+          ctx.fillText('tengo algo que decirte...', cx, cy + 22);
+        }
+
+        ctx.globalAlpha = 1;
+        if (cap2Frame >= 130) dibujarTocaContinuar();
+
+      // ── INTRO_CORRE: hopper sale corriendo tras el tap ──
+      } else if (estadoCap2 === 'INTRO_CORRE') {
+        dibujarCastor(cap2BeaverX, pisoY - NAVE_ALTO, 3, false);
+
+        if (cap2BeaverX > canvas.width - 80) {
+          ctx.globalAlpha = Math.min(1, (cap2BeaverX - (canvas.width - 80)) / 80);
+          ctx.fillStyle   = '#000';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+      // ── FADE: transición a negro → nueva escena ──
+      } else if (estadoCap2 === 'FADE') {
+        const p = Math.min(1, cap2Frame / 55);
+        if (p < 0.40) {
+          ctx.globalAlpha = 1;
+          ctx.fillStyle   = '#000';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        } else {
+          dibujarEscenaCamino();
+          ctx.globalAlpha = 1 - (p - 0.40) / 0.60;
+          ctx.fillStyle   = '#000';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+      // ── CAMINO: cinemática 3D automática ──
+      } else if (estadoCap2 === 'CAMINO') {
+        dibujarEscenaCamino();
+        dibujarCasaConPuerta(0, 0);
+
+        const hopperT    = Math.min(1, cap2Frame / 240);
+        const hopperCanY = canvas.height * 0.84 - (canvas.height * 0.84 - horizonY - 28) * hopperT;
+        const hopperEsc  = (1 - hopperT * 0.74) * 1.5;
+
+        if (hopperT < 1) {
+          // rotado -90° para que mire hacia el horizonte, con bobbing vertical
+          const bob = Math.sin(frameContador * 0.35) * 2;
+          ctx.save();
+          ctx.translate(cx - 5, hopperCanY + bob);
+          ctx.rotate(-Math.PI / 2);
+          ctx.scale(hopperEsc, hopperEsc);
+          dibujarCastor(-NAVE_ANCHO / 2, -NAVE_ALTO / 2, 0, true);
+          ctx.restore();
+        }
+
+        if (cap2Frame < 28) {
+          ctx.save();
+          ctx.globalAlpha = 1 - cap2Frame / 28;
+          ctx.fillStyle   = '#000';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.restore();
+        }
+
+        // close-up de toc toc cuando Hopper llega a la puerta
+        if (cap2Frame >= 240) {
+          dibujarCloseUpPuerta(cap2Frame - 240);
+        }
+
+        ctx.globalAlpha = 1;
+
+      // ── PROPUESTA: texto + espera tap antes de mostrar botones ──
+      } else if (estadoCap2 === 'PROPUESTA') {
+        dibujarEscenaCamino();
+
+        const ESC = 0.43;
+        const bop = Math.abs(Math.sin(cap2Frame * 0.06)) * 4;
+        dibujarCastorEn3D(cx - 22, horizonY + 14 - bop, ESC, 0, true);
+        dibujarElena(    cx + 22, horizonY + 14,         ESC);
+
+        const fi = Math.min(1, cap2Frame / 55);
+        ctx.globalAlpha = fi;
+
+        ctx.font        = '700 26px "Orbitron", sans-serif';
+        ctx.fillStyle   = '#FFD166';
+        ctx.shadowColor = '#FFD166'; ctx.shadowBlur = 16;
+        ctx.fillText('Elena...', cx, cy - 88);
+        ctx.shadowBlur  = 0;
+
+        if (cap2Frame > 45) {
+          ctx.globalAlpha = Math.min(1, (cap2Frame - 45) / 40) * fi;
+          ctx.font        = '700 23px "Orbitron", sans-serif';
+          ctx.fillStyle   = '#FFFFFF';
+          ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 12;
+          ctx.fillText('¿Quieres ser mi novia?', cx, cy - 52);
+          ctx.shadowBlur  = 0;
+          ctx.font        = '400 17px "Rajdhani", sans-serif';
+          ctx.fillStyle   = '#D8D0FF';
+          ctx.fillText('— con todo mi cariño, Alex  🦫', cx, cy - 22);
+        }
+
+        ctx.globalAlpha = 1;
+        if (cap2Frame >= 80) dibujarTocaContinuar();
+
+      // ── PROPUESTA_BOTONES: SÍ y NO ──
+      } else if (estadoCap2 === 'PROPUESTA_BOTONES') {
+        dibujarEscenaCamino();
+
+        const ESC = 0.43;
+        const bop = Math.abs(Math.sin(cap2Frame * 0.06)) * 4;
+        dibujarCastorEn3D(cx - 22, horizonY + 14 - bop, ESC, 0, true);
+        dibujarElena(    cx + 22, horizonY + 14,         ESC);
+
+        ctx.font        = '700 26px "Orbitron", sans-serif';
+        ctx.fillStyle   = '#FFD166';
+        ctx.shadowColor = '#FFD166'; ctx.shadowBlur = 16;
+        ctx.fillText('Elena...', cx, cy - 88);
+        ctx.shadowBlur  = 0;
+        ctx.font        = '700 23px "Orbitron", sans-serif';
+        ctx.fillStyle   = '#FFFFFF';
+        ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 12;
+        ctx.fillText('¿Quieres ser mi novia?', cx, cy - 52);
+        ctx.shadowBlur  = 0;
+        ctx.font        = '400 17px "Rajdhani", sans-serif';
+        ctx.fillStyle   = '#D8D0FF';
+        ctx.fillText('— con todo mi cariño, Alex  🦫', cx, cy - 22);
+
+        const pulso = 0.88 + 0.12 * Math.sin(frameContador * 0.1);
+        ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 22 * pulso;
+        ctx.fillStyle   = '#FF2E92';
+        ctx.beginPath(); ctx.roundRect(cx - 75, cy + 20, 150, 52, 12); ctx.fill();
+        ctx.shadowBlur  = 0;
+        ctx.font        = '700 22px "Orbitron", sans-serif';
+        ctx.fillStyle   = '#FFFFFF';
+        ctx.fillText('SÍ  ❤', cx, cy + 53);
+
+        ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 6;
+        ctx.fillStyle   = 'rgba(60,60,60,0.75)';
+        ctx.beginPath(); ctx.roundRect(btnNoPosX, btnNoPosY, 90, 40, 8); ctx.fill();
+        ctx.shadowBlur  = 0;
+        ctx.font        = '600 15px "Rajdhani", sans-serif';
+        ctx.fillStyle   = '#AAAAAA';
+        ctx.fillText('No', btnNoPosX + 45, btnNoPosY + 26);
+
+      // ── CELEBRACION ──
+      } else if (estadoCap2 === 'CELEBRACION') {
+        dibujarEscenaCamino();
+
+        const bounce = Math.abs(Math.sin(cap2Frame * 0.13)) * 42;
+        const ESC    = 0.50;
+        dibujarCastorEn3D(cx - 28, horizonY + 10 - bounce,       ESC, -9, false);
+        dibujarElena(    cx + 28, horizonY + 10 - bounce * 0.8, ESC);
+
+        corazones.forEach(c => {
+          ctx.font      = `${c.size}px serif`;
+          ctx.fillStyle = c.color;
+          ctx.fillText('❤', c.x, c.y);
+        });
+
+        const fi = Math.min(1, cap2Frame / 50);
+        ctx.globalAlpha = fi;
+        ctx.font        = '900 50px "Orbitron", sans-serif';
+        ctx.fillStyle   = '#FF2E92';
+        ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 32;
+        ctx.fillText('¡Sí!', cx, cy - 18);
+        ctx.shadowBlur  = 0;
+        ctx.font        = '600 18px "Rajdhani", sans-serif';
+        ctx.fillStyle   = '#FFD166';
+        ctx.fillText('Elena  ❤  Hopper', cx, cy + 28);
+        ctx.globalAlpha = 1;
+
+      // ── FINAL: imagen permanente, dos hoppers con besito ──
+      } else if (estadoCap2 === 'FINAL') {
+        dibujarEscenaCamino();
+
+        // corazones flotantes de fondo
+        corazones.forEach(c => {
+          ctx.font      = `${c.size}px serif`;
+          ctx.fillStyle = c.color;
+          ctx.fillText('❤', c.x, c.y);
+        });
+
+        // dos hoppers se juntan y se dan un besito
+        const approachT = Math.min(1, cap2Frame / 90);
+        const ESC       = 0.55;
+        const sep       = 52 - approachT * 18;
+        const sway      = Math.sin(frameContador * 0.05) * 2;
+
+        dibujarCastorEn3D(cx - sep + sway, horizonY + 10, ESC, 0, true);
+        dibujarElena(    cx + sep - sway, horizonY + 10, ESC);
+
+        // corazón pulsante entre ellos (el beso)
+        const heartPulse = 1 + 0.12 * Math.sin(frameContador * 0.18);
+        ctx.save();
+        ctx.font      = `${Math.round(24 * heartPulse)}px serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText('❤', cx, horizonY - 6);
+        ctx.restore();
+
+        // título
+        const fi = Math.min(1, cap2Frame / 60);
+        ctx.globalAlpha = fi;
+        ctx.textAlign   = 'center';
+        ctx.font        = '700 24px "Orbitron", sans-serif';
+        ctx.fillStyle   = '#FF2E92';
+        ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 24;
+        ctx.fillText('Elena  ❤  Hopper', cx, cy - 68);
+        ctx.shadowBlur  = 0;
+        ctx.font        = '500 14px "Rajdhani", sans-serif';
+        ctx.fillStyle   = '#E8D0FF';
+        ctx.fillText('para siempre  ✦', cx, cy - 46);
+
+        // botón Reiniciar (aparece después de 90 frames)
+        ctx.globalAlpha = Math.min(1, Math.max(0, (cap2Frame - 90) / 30));
+        const btnW = 130, btnH = 38;
+        const btnX = cx - btnW / 2;
+        const btnY = canvas.height - 85;
+        ctx.fillStyle   = 'rgba(30,15,50,0.78)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+        ctx.lineWidth   = 1;
+        ctx.beginPath(); ctx.roundRect(btnX, btnY, btnW, btnH, 10); ctx.fill(); ctx.stroke();
+        ctx.font      = '500 13px "Rajdhani", sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.62)';
+        ctx.fillText('Reiniciar', cx, btnY + 25);
+
+        ctx.globalAlpha = 1;
+      }
+
+      ctx.restore();
+    }
+
+
+    // ─── GAME LOOP ───────────────────────────────────────────────────────────────
+    function loopPrueba() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      frameContador++; // avanza siempre, en todos los estados (para animaciones)
+
+      dibujarCielo();     // fondo dinámico: gradiente día/noche + sol (también actualiza alfaEstrellas)
+      dibujarEstrellas(); // estrellas sobre el fondo (con la opacidad del momento del día)
+
+      if (estadoJuego === 'JUGANDO') {
+        velocidadMundo = Math.min(VEL_MUNDO_MAX, VEL_MUNDO_BASE + Math.sqrt(score) * 0.05);
+        actualizarFisica();
+        actualizarObstaculos();
+        score++;
+
+        if (detectarColision()) {
+          partidasJugadas++;
+          localStorage.setItem('hopper_partidas', partidasJugadas);
+          if (partidasJugadas >= 5 && !propuestaAceptada) {
+            iniciarCapitulo2();
+          } else {
+            estadoJuego = 'GAME_OVER';
+          }
+        }
+      }
+
+      if (estadoJuego === 'INICIO') {
+        nave.y    = (pisoY - NAVE_ALTO) + Math.sin(frameContador * 0.05) * 4;
+        nave.velY = 0;
+      }
+
+      if (estadoJuego === 'CAPITULO_2') actualizarCapitulo2();
+
+      if (estadoJuego !== 'CAPITULO_2' || estadoCap2 === 'INTRO' || estadoCap2 === 'INTRO_CORRE') dibujarPiso();
+
+      if (estadoJuego !== 'CAPITULO_2') {
+        dibujarObstaculos();
+        dibujarNave();
+      }
+
+      if (estadoJuego === 'JUGANDO' || estadoJuego === 'GAME_OVER') dibujarScore();
+
+      if (estadoJuego === 'INICIO')     dibujarMenuInicio();
+      if (estadoJuego === 'GAME_OVER')  dibujarGameOver();
+      if (estadoJuego === 'CAPITULO_2') dibujarCapitulo2();
+
+      requestAnimationFrame(loopPrueba);
+    }
+
+    ajustarTamano();
+    window.addEventListener('resize', ajustarTamano);
+    loopPrueba();
+
+    canvas.addEventListener('touchstart', function(evento) {
+      evento.preventDefault();
+
+      if (estadoJuego === 'CAPITULO_2') {
+        // INTRO → tap arranca la corretiza de Hopper
+        if (estadoCap2 === 'INTRO' && cap2Frame >= 130) {
+          estadoCap2 = 'INTRO_CORRE';
+          cap2Frame  = 0;
+          return;
+        }
+        // PROPUESTA → tap muestra los botones
+        if (estadoCap2 === 'PROPUESTA' && cap2Frame >= 80) {
+          estadoCap2 = 'PROPUESTA_BOTONES';
+          cap2Frame  = 0;
+          reposicionarNo();
+          return;
+        }
+        // PROPUESTA_BOTONES → SÍ / NO
+        if (estadoCap2 === 'PROPUESTA_BOTONES') {
+          const tX = evento.touches[0].clientX;
+          const tY = evento.touches[0].clientY;
+          const cx = canvas.width / 2, cy = canvas.height / 2;
+          if (tX >= cx - 75 && tX <= cx + 75 && tY >= cy + 20 && tY <= cy + 72) {
+            iniciarCelebracion();
+            return;
+          }
+          if (tX >= btnNoPosX && tX <= btnNoPosX + 90 && tY >= btnNoPosY && tY <= btnNoPosY + 40) {
+            reposicionarNo();
+          }
+          return;
+        }
+        // FINAL → solo botón Reiniciar
+        if (estadoCap2 === 'FINAL' && cap2Frame > 90) {
+          const rect = canvas.getBoundingClientRect();
+          const scaleX = canvas.width  / rect.width;
+          const scaleY = canvas.height / rect.height;
+          const tX = (evento.touches[0].clientX - rect.left) * scaleX;
+          const tY = (evento.touches[0].clientY - rect.top)  * scaleY;
+          const btnW = 130, btnH = 38;
+          const btnX = canvas.width / 2 - btnW / 2;
+          const btnY = canvas.height - 85;
+          if (tX >= btnX && tX <= btnX + btnW && tY >= btnY && tY <= btnY + btnH) {
+            forzarAtardecer = false;
+            reiniciarJuego();
+            estadoJuego = 'INICIO';
+          }
+          return;
+        }
+        return; // bloquea el salto durante el capítulo 2
+      }
+
+      if (estadoJuego === 'INICIO') {
+        nave.y      = pisoY - NAVE_ALTO;
+        nave.velY   = 0;
+        nave.enPiso = true;
+        estadoJuego = 'JUGANDO';
+        return;
+      }
+
+      if (estadoJuego === 'GAME_OVER') {
+        reiniciarJuego();
+        return;
+      }
+
+      if (nave.enPiso) {
+        nave.velY   = IMPULSO_SALTO;
+        nave.enPiso = false;
+      }
+    });
+  </script>
+
+</body>
+</html>
