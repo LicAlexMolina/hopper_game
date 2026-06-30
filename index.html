@@ -992,160 +992,256 @@
     }
 
     function dibujarCloseUpPuerta(f) {
-      const cxP     = canvas.width / 2;
-      const fadein  = Math.min(1, f / 15);
-      const doorOpen = f >= 100 ? Math.min(1, (f - 100) / 80) : 0;
-      const elenaOK  = f >= 200 ? Math.min(1, (f - 200) / 60) : 0;
-      const fadeout  = f >= 340 ? Math.min(1, (f - 340) / 40) : 0;
+      const W   = canvas.width;
+      const H   = canvas.height;
+      const cxP = W / 2;
 
-      ctx.save();
-      // dark overlay
-      ctx.globalAlpha = fadein * 0.94 * (1 - fadeout);
-      ctx.fillStyle   = '#0A0514';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // ── Fases del close-up (f relativo a cap2Frame - 240) ──
+      const KNOCK_END  = 70;   // fin del toc toc
+      const DOOR_END   = 160;  // puerta completamente abierta
+      const FADE_INT   = 195;  // empieza cross-fade a interior
+      const INT_FULL   = 235;  // interior completamente visible
+      const PROPOSAL   = 330;  // comienza texto de propuesta
+      const TAP_READY  = 470;  // aparece TOCA PARA CONTINUAR
 
-      const baseAlpha = fadein * (1 - fadeout);
-      ctx.globalAlpha = baseAlpha;
+      const doorOpen  = f >= KNOCK_END ? Math.min(1, (f - KNOCK_END) / (DOOR_END  - KNOCK_END)) : 0;
+      const enterT    = f >= DOOR_END  ? Math.min(1, (f - DOOR_END)  / (FADE_INT  - DOOR_END))  : 0;
+      const intAlpha  = f >= FADE_INT  ? Math.min(1, (f - FADE_INT)  / (INT_FULL  - FADE_INT))  : 0;
+      const extAlpha  = f < FADE_INT   ? 1 : Math.max(0, 1 - (f - FADE_INT) / 40);
+      const fadein    = Math.min(1, f / 20);
 
-      const pH = canvas.height * 0.66;
-      const pW = Math.min(canvas.width * 0.78, pH * 0.62);
+      // dimensiones del panel de puerta (exterior)
+      const pH = H * 0.68;
+      const pW = Math.min(W * 0.78, pH * 0.62);
       const pX = cxP - pW / 2;
-      const pY = canvas.height * 0.13;
+      const pY = H * 0.12;
 
-      // door frame (stone surround)
-      ctx.fillStyle = '#5A3008';
-      ctx.beginPath();
-      ctx.roundRect(pX - 14, pY - 10, pW + 28, pH + 20, 6);
-      ctx.fill();
-
-      // warm interior (fills behind door)
-      if (doorOpen > 0) {
-        ctx.save();
-        const ig = ctx.createLinearGradient(pX, pY, pX + pW, pY + pH);
-        ig.addColorStop(0, '#D07030');
-        ig.addColorStop(1, '#6A3010');
-        ctx.fillStyle = ig;
-        ctx.beginPath();
-        ctx.roundRect(pX, pY, pW, pH, 4);
-        ctx.fill();
-        // floor
-        ctx.fillStyle = '#5C3010';
-        ctx.fillRect(pX, pY + pH * 0.72, pW, pH * 0.28);
-        // window glow
-        if (doorOpen > 0.3) {
-          ctx.globalAlpha *= (doorOpen - 0.3) / 0.7;
-          ctx.fillStyle    = 'rgba(255,210,90,0.40)';
-          ctx.fillRect(pX + pW * 0.12, pY + pH * 0.14, pW * 0.33, pH * 0.30);
-        }
-        ctx.restore();
-      }
-
-      // door panel squishes open (perspective: left edge stays, right edge collapses)
-      if (doorOpen < 1) {
-        const dW = pW * (1 - doorOpen * 0.93);
-        ctx.save();
-        const dg = ctx.createLinearGradient(pX, 0, pX + dW, 0);
-        dg.addColorStop(0, '#7A4010');
-        dg.addColorStop(0.5, '#A85C20');
-        dg.addColorStop(1, '#6A380C');
-        ctx.fillStyle = dg;
-        ctx.beginPath();
-        ctx.roundRect(pX, pY, dW, pH, 4);
-        ctx.fill();
-        // knob
-        ctx.fillStyle   = '#FFCC44';
-        ctx.shadowColor = '#FFD700';
-        ctx.shadowBlur  = 6;
-        ctx.beginPath();
-        ctx.arc(pX + dW * 0.72, pY + pH * 0.52, 7, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-        // panel grooves
-        ctx.strokeStyle = 'rgba(0,0,0,0.22)';
-        ctx.lineWidth   = 2;
-        ctx.beginPath();
-        ctx.roundRect(pX + 14, pY + 14, dW - 28, pH * 0.38, 3);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.roundRect(pX + 14, pY + pH * 0.48, dW - 28, pH * 0.36, 3);
-        ctx.stroke();
-        ctx.restore();
-      }
-
-      // Elena appears in doorway
-      if (elenaOK > 0 && doorOpen > 0.4) {
-        ctx.save();
-        ctx.globalAlpha *= elenaOK;
-        dibujarElena(cxP + pW * 0.08, pY + pH * 0.74, 1.15);
-        ctx.restore();
-      }
-
-      // Hopper knocking at left side of door
-      const kBounce = f < 120 ? Math.abs(Math.sin(f * 0.42)) * 14 : 0;
       ctx.save();
-      ctx.translate(pX - 18, pY + pH * 0.74 - kBounce);
-      ctx.scale(1.12, 1.12);
-      dibujarCastor(-NAVE_ANCHO / 2, -NAVE_ALTO / 2, 0, true);
-      ctx.restore();
+      ctx.textAlign = 'center';
 
-      // impact stars on knock
-      if (f < 120 && Math.floor(f / 20) % 2 === 0) {
-        const sX = pX + 20;
-        const sY = pY + pH * 0.42;
-        const pulse = 1 + 0.3 * Math.sin(f * 0.38);
+      // ═══════════════════════════════════════════
+      //  EXTERIOR — close-up de la puerta
+      // ═══════════════════════════════════════════
+      if (extAlpha > 0) {
+        // overlay oscuro
+        ctx.globalAlpha = fadein * 0.95 * extAlpha;
+        ctx.fillStyle   = '#0A0514';
+        ctx.fillRect(0, 0, W, H);
+        ctx.globalAlpha = fadein * extAlpha;
+
+        // marco de la puerta
+        ctx.fillStyle = '#5A3008';
+        ctx.beginPath(); ctx.roundRect(pX - 14, pY - 10, pW + 28, pH + 20, 6); ctx.fill();
+
+        // interior cálido (se revela al abrirse)
+        if (doorOpen > 0) {
+          const ig = ctx.createLinearGradient(pX, pY, pX + pW, pY + pH);
+          ig.addColorStop(0, '#C86820'); ig.addColorStop(1, '#6A3010');
+          ctx.fillStyle = ig;
+          ctx.beginPath(); ctx.roundRect(pX, pY, pW, pH, 4); ctx.fill();
+          ctx.fillStyle = '#5C3010';
+          ctx.fillRect(pX, pY + pH * 0.72, pW, pH * 0.28);
+          if (doorOpen > 0.25) {
+            ctx.save();
+            ctx.globalAlpha *= Math.min(1, (doorOpen - 0.25) / 0.5);
+            ctx.fillStyle = 'rgba(255,210,90,0.38)';
+            ctx.fillRect(pX + pW * 0.55, pY + pH * 0.14, pW * 0.30, pH * 0.26);
+            ctx.restore();
+          }
+          // Elena asomándose cuando la puerta está bastante abierta
+          if (doorOpen > 0.60) {
+            ctx.save();
+            ctx.globalAlpha *= Math.min(1, (doorOpen - 0.60) / 0.40);
+            dibujarElena(pX + pW * 0.68, pY + pH * 0.74, 0.92);
+            ctx.restore();
+          }
+          if (doorOpen > 0.78) {
+            ctx.save();
+            ctx.globalAlpha *= Math.min(1, (doorOpen - 0.78) / 0.22);
+            ctx.font = '700 20px "Orbitron", sans-serif';
+            ctx.fillStyle = '#FFE8F5'; ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 14;
+            ctx.fillText('¡Hopper!', cxP, pY - 20);
+            ctx.shadowBlur = 0;
+            ctx.restore();
+          }
+        }
+
+        // panel de puerta (se aplasta hacia la izquierda al abrirse)
+        if (doorOpen < 1) {
+          const dW = pW * (1 - doorOpen * 0.93);
+          ctx.save();
+          const dg = ctx.createLinearGradient(pX, 0, pX + dW, 0);
+          dg.addColorStop(0, '#7A4010'); dg.addColorStop(0.5, '#A85C20'); dg.addColorStop(1, '#6A380C');
+          ctx.fillStyle = dg;
+          ctx.beginPath(); ctx.roundRect(pX, pY, dW, pH, 4); ctx.fill();
+          ctx.fillStyle = '#FFCC44'; ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 6;
+          ctx.beginPath(); ctx.arc(pX + dW * 0.72, pY + pH * 0.52, 7, 0, Math.PI * 2); ctx.fill();
+          ctx.shadowBlur = 0;
+          ctx.strokeStyle = 'rgba(0,0,0,0.22)'; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.roundRect(pX + 14, pY + 14,      dW - 28, pH * 0.38, 3); ctx.stroke();
+          ctx.beginPath(); ctx.roundRect(pX + 14, pY + pH * 0.48, dW - 28, pH * 0.35, 3); ctx.stroke();
+          ctx.restore();
+        }
+
+        // Hopper en la puerta (golpea → entra)
+        const hopX    = pX - 18 + (pX + pW * 0.22 - (pX - 18)) * enterT;
+        const kBounce = f < KNOCK_END ? Math.abs(Math.sin(f * 0.20)) * 14 : 0;
         ctx.save();
-        ctx.strokeStyle = '#FFEE44';
-        ctx.lineWidth   = 2.2;
-        for (let i = 0; i < 8; i++) {
-          const ang = (i / 8) * Math.PI * 2;
+        ctx.translate(hopX, pY + pH * 0.73 - kBounce);
+        ctx.globalAlpha *= 1 - enterT * 0.55;
+        ctx.scale(1.12, 1.12);
+        dibujarCastor(-NAVE_ANCHO / 2, -NAVE_ALTO / 2, 0, true);
+        ctx.restore();
+
+        // estrellas de impacto (blink lento: cada 28 frames)
+        if (f < KNOCK_END && Math.floor(f / 28) % 2 === 0 && f > 6) {
+          const sX = pX + 22, sY = pY + pH * 0.43;
+          const pulse = 1 + 0.28 * Math.sin(f * 0.20);
+          ctx.save();
+          ctx.strokeStyle = '#FFEE44'; ctx.lineWidth = 2.2;
+          for (let i = 0; i < 8; i++) {
+            const ang = (i / 8) * Math.PI * 2;
+            ctx.beginPath();
+            ctx.moveTo(sX + Math.cos(ang) * 7  * pulse, sY + Math.sin(ang) * 7  * pulse);
+            ctx.lineTo(sX + Math.cos(ang) * 18 * pulse, sY + Math.sin(ang) * 18 * pulse);
+            ctx.stroke();
+          }
+          ctx.fillStyle = '#FFEE44';
+          ctx.beginPath(); ctx.arc(sX, sY, 4, 0, Math.PI * 2); ctx.fill();
+          ctx.restore();
+        }
+
+        // TOC TOC text (blink lento: cada 28 frames)
+        if (f < KNOCK_END) {
+          const blink = Math.floor(f / 28) % 2 === 0;
+          ctx.save();
+          ctx.globalAlpha = fadein * extAlpha * (blink ? 0.95 : 0.18);
+          ctx.font = '700 22px "Orbitron", sans-serif';
+          ctx.fillStyle = '#FFD166'; ctx.shadowColor = '#FFD166'; ctx.shadowBlur = 18;
+          ctx.fillText('¡TOC  TOC!', cxP, pY - 20);
+          ctx.shadowBlur = 0;
+          ctx.restore();
+        }
+      } // fin extAlpha
+
+      // ═══════════════════════════════════════════
+      //  INTERIOR — Hopper y Elena adentro de la casa
+      // ═══════════════════════════════════════════
+      if (f >= FADE_INT) {
+        ctx.save();
+        ctx.globalAlpha = intAlpha;
+
+        // fondo de la habitación
+        const bg = ctx.createLinearGradient(0, 0, 0, H);
+        bg.addColorStop(0,    '#8B3D10');
+        bg.addColorStop(0.65, '#6A2E0A');
+        bg.addColorStop(1,    '#3A1804');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, W, H);
+
+        // piso de madera
+        ctx.fillStyle = '#3A1A06';
+        ctx.fillRect(0, H * 0.70, W, H * 0.30);
+        ctx.strokeStyle = '#2A1004'; ctx.lineWidth = 1.5;
+        for (let i = 1; i < 6; i++) {
           ctx.beginPath();
-          ctx.moveTo(sX + Math.cos(ang) * 7  * pulse, sY + Math.sin(ang) * 7  * pulse);
-          ctx.lineTo(sX + Math.cos(ang) * 18 * pulse, sY + Math.sin(ang) * 18 * pulse);
+          ctx.moveTo(0, H * 0.70 + (i / 6) * H * 0.30);
+          ctx.lineTo(W, H * 0.70 + (i / 6) * H * 0.30);
           ctx.stroke();
         }
-        ctx.fillStyle = '#FFEE44';
-        ctx.beginPath();
-        ctx.arc(sX, sY, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
 
-      // TOC TOC text
-      ctx.textAlign = 'center';
-      if (f < 120) {
-        const blink = Math.floor(f / 18) % 2 === 0;
+        // brillo de vela (glow radial central)
+        const cg = ctx.createRadialGradient(cxP, H * 0.35, 0, cxP, H * 0.35, W * 0.55);
+        cg.addColorStop(0, 'rgba(255,180,60,0.40)');
+        cg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = cg;
+        ctx.fillRect(0, 0, W, H);
+
+        // ventana
+        ctx.fillStyle = 'rgba(255,200,80,0.28)';
+        ctx.fillRect(W * 0.72, H * 0.18, W * 0.18, H * 0.22);
+        ctx.strokeStyle = '#6A3010'; ctx.lineWidth = 4;
+        ctx.strokeRect(W * 0.72, H * 0.18, W * 0.18, H * 0.22);
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(W * 0.72 + W * 0.09, H * 0.18); ctx.lineTo(W * 0.72 + W * 0.09, H * 0.40); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(W * 0.72, H * 0.29); ctx.lineTo(W * 0.90, H * 0.29); ctx.stroke();
+
+        const ESC = 1.30;
+        const charY = H * 0.70;
+
+        // Hopper (izquierda, mirando a Elena)
+        dibujarCastorEn3D(cxP - 52, charY, ESC, 0, true);
+
+        // Elena (derecha, girada a la izquierda para mirar a Hopper)
         ctx.save();
-        ctx.globalAlpha = baseAlpha * (blink ? 0.95 : 0.20);
-        ctx.font        = '700 22px "Orbitron", sans-serif';
-        ctx.fillStyle   = '#FFD166';
-        ctx.shadowColor = '#FFD166';
-        ctx.shadowBlur  = 18;
-        ctx.fillText('¡TOC  TOC!', cxP, pY - 18);
-        ctx.shadowBlur  = 0;
+        ctx.translate(cxP + 52, charY);
+        ctx.scale(-ESC, ESC);
+        dibujarCastor(-NAVE_ANCHO / 2, -NAVE_ALTO / 2, 0, true);
+        ctx.fillStyle = '#FF2E92';
+        ctx.beginPath(); ctx.moveTo(-7,-23); ctx.lineTo(-2,-19); ctx.lineTo(-7,-15); ctx.fill();
+        ctx.beginPath(); ctx.moveTo( 3,-23); ctx.lineTo(-2,-19); ctx.lineTo( 3,-15); ctx.fill();
+        ctx.fillStyle = '#FF6BAD';
+        ctx.beginPath(); ctx.arc(-2, -19, 2.5, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
+
+        // corazón pulsante entre ellos
+        if (f >= INT_FULL + 15) {
+          const hp = 1 + 0.14 * Math.sin(frameContador * 0.14);
+          ctx.globalAlpha = intAlpha * Math.min(1, (f - INT_FULL - 15) / 40);
+          ctx.font = `${Math.round(22 * hp)}px serif`;
+          ctx.fillText('❤', cxP, charY - ESC * NAVE_ALTO - 14);
+          ctx.globalAlpha = intAlpha;
+        }
+
+        // "¡Hopper! ¿Qué haces aquí...?" — reacción de Elena (aparece y luego se va)
+        const reactAlpha = (() => {
+          if (f < INT_FULL) return 0;
+          if (f < PROPOSAL)  return Math.min(1, (f - INT_FULL) / 45);
+          return Math.max(0, 1 - (f - PROPOSAL) / 40);
+        })();
+        if (reactAlpha > 0) {
+          ctx.globalAlpha = intAlpha * reactAlpha;
+          ctx.font = '600 17px "Rajdhani", sans-serif';
+          ctx.fillStyle = '#FFE8F5'; ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 8;
+          ctx.fillText('¡Hopper! ¿Qué haces aquí...?', cxP, H * 0.14);
+          ctx.shadowBlur = 0;
+        }
+
+        // ── Texto de la propuesta (aparece secuencialmente) ──
+        if (f >= PROPOSAL) {
+          // "Elena..."
+          ctx.globalAlpha = intAlpha * Math.min(1, (f - PROPOSAL) / 50);
+          ctx.font = '700 26px "Orbitron", sans-serif';
+          ctx.fillStyle = '#FFD166'; ctx.shadowColor = '#FFD166'; ctx.shadowBlur = 16;
+          ctx.fillText('Elena...', cxP, H * 0.14);
+          ctx.shadowBlur = 0;
+
+          // "¿Quieres ser mi novia?"
+          if (f >= PROPOSAL + 65) {
+            ctx.globalAlpha = intAlpha * Math.min(1, (f - PROPOSAL - 65) / 55);
+            ctx.font = '700 23px "Orbitron", sans-serif';
+            ctx.fillStyle = '#FFFFFF'; ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 14;
+            ctx.fillText('¿Quieres ser mi novia?', cxP, H * 0.22);
+            ctx.shadowBlur = 0;
+          }
+
+          // "— con todo mi cariño, Alex 🦫"
+          if (f >= PROPOSAL + 120) {
+            ctx.globalAlpha = intAlpha * Math.min(1, (f - PROPOSAL - 120) / 55);
+            ctx.font = '400 17px "Rajdhani", sans-serif';
+            ctx.fillStyle = '#D8D0FF';
+            ctx.fillText('— con todo mi cariño, Alex  🦫', cxP, H * 0.30);
+          }
+        }
+
+        ctx.globalAlpha = intAlpha;
+        ctx.restore(); // end intAlpha block
+
+        // TOCA PARA CONTINUAR
+        if (f >= TAP_READY) dibujarTocaContinuar();
       }
 
-      // ¡Hopper! from Elena
-      if (elenaOK > 0.5) {
-        ctx.save();
-        ctx.globalAlpha = baseAlpha * Math.min(1, (elenaOK - 0.5) * 2);
-        ctx.font        = '700 20px "Orbitron", sans-serif';
-        ctx.fillStyle   = '#FFE8F5';
-        ctx.shadowColor = '#FF2E92';
-        ctx.shadowBlur  = 14;
-        ctx.fillText('¡Hopper!', cxP, pY - 18);
-        ctx.shadowBlur  = 0;
-        ctx.restore();
-      }
-
-      // final fade to black
-      if (fadeout > 0) {
-        ctx.globalAlpha = fadeout;
-        ctx.fillStyle   = '#000';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-      }
-
-      ctx.restore();
+      ctx.restore(); // main save
     }
 
     function actualizarCapitulo2() {
@@ -1167,12 +1263,7 @@
         }
       }
 
-      if (estadoCap2 === 'CAMINO') {
-        if (cap2Frame > 660) {
-          estadoCap2 = 'PROPUESTA';
-          cap2Frame  = 0;
-        }
-      }
+      // CAMINO no auto-avanza; el tap lo lleva a PROPUESTA_BOTONES cuando la propuesta ya apareció
 
       if (estadoCap2 === 'CELEBRACION' || estadoCap2 === 'FINAL') {
         corazones.forEach(c => {
@@ -1253,14 +1344,8 @@
         const hopperEsc  = (1 - hopperT * 0.74) * 1.5;
 
         if (hopperT < 1) {
-          // rotado -90° para que mire hacia el horizonte, con bobbing vertical
           const bob = Math.sin(frameContador * 0.35) * 2;
-          ctx.save();
-          ctx.translate(cx - 5, hopperCanY + bob);
-          ctx.rotate(-Math.PI / 2);
-          ctx.scale(hopperEsc, hopperEsc);
-          dibujarCastor(-NAVE_ANCHO / 2, -NAVE_ALTO / 2, 0, true);
-          ctx.restore();
+          dibujarCastorEn3D(cx - 5, hopperCanY + bob, hopperEsc, 0, true);
         }
 
         if (cap2Frame < 28) {
@@ -1501,8 +1586,8 @@
           cap2Frame  = 0;
           return;
         }
-        // PROPUESTA → tap muestra los botones
-        if (estadoCap2 === 'PROPUESTA' && cap2Frame >= 80) {
+        // CAMINO → tap después de que aparece la propuesta en el close-up interior (f >= 240+470)
+        if (estadoCap2 === 'CAMINO' && cap2Frame >= 710) {
           estadoCap2 = 'PROPUESTA_BOTONES';
           cap2Frame  = 0;
           reposicionarNo();
