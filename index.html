@@ -248,12 +248,10 @@
       // Paso 1 — Gravedad: cada frame la nave gana velocidad hacia abajo.
       //   Imagina que velY empieza muy negativo (subiendo fuerte) y la gravedad
       //   lo va empujando hacia 0 (frena la subida), luego hacia positivo (cae).
-      nave.velY += GRAVEDAD;
+      nave.velY += GRAVEDAD * dt;
 
-      // Paso 2 — Movimiento: desplazamos la nave según su velocidad actual.
-      //   velY está en px/frame, así que solo sumamos. Si la nave va a 5 px/frame,
-      //   en 10 frames habrá bajado 50px — igual que posicion += velocidad en Python.
-      nave.y += nave.velY;
+      // Paso 2 — Movimiento escalado por delta-time para ser independiente del framerate.
+      nave.y += nave.velY * dt;
 
       // Paso 3 — Colisión con el suelo.
       //   El borde inferior de la nave es nave.y + NAVE_ALTO.
@@ -593,7 +591,7 @@
     }
 
     function actualizarObstaculos() {
-      framesSiguienteObs--;
+      framesSiguienteObs -= dt;
       if (framesSiguienteObs <= 0) {
         spawnObstaculo();
         /*
@@ -606,7 +604,7 @@
       }
 
       for (let i = obstaculos.length - 1; i >= 0; i--) {
-        obstaculos[i].x -= velocidadMundo; // todos se mueven a la velocidad actual
+        obstaculos[i].x -= velocidadMundo * dt;
         if (obstaculos[i].x + OBS_ANCHO < 0) obstaculos.splice(i, 1);
       }
     }
@@ -686,7 +684,9 @@
         'GAME_OVER' → todo congelado, overlay con puntaje final
     */
     let estadoJuego  = 'INICIO';
-    let frameContador = 0; // contador global de frames, usado para animaciones de menú
+    let frameContador = 0;
+    let dt        = 1;        // multiplicador de delta-time (1.0 = 60fps, 2.0 = 30fps, etc.)
+    let lastTime  = 0;        // timestamp del frame anterior para calcular dt
 
     // ─── CAPÍTULO 2 — LA PROPUESTA ───────────────────────────────────────────────
     // localStorage guarda valores entre sesiones (como un dict persistente en el navegador)
@@ -1245,11 +1245,11 @@
     }
 
     function actualizarCapitulo2() {
-      cap2Frame++;
+      cap2Frame += dt;
 
       // INTRO_CORRE: hopper corre tras el tap, no avanza solo
       if (estadoCap2 === 'INTRO_CORRE') {
-        cap2BeaverX += velocidadMundo * 2.0;
+        cap2BeaverX += velocidadMundo * 2.0 * dt;
         if (cap2BeaverX > canvas.width + NAVE_ANCHO + 20) {
           estadoCap2 = 'FADE';
           cap2Frame  = 0;
@@ -1267,8 +1267,8 @@
 
       if (estadoCap2 === 'CELEBRACION' || estadoCap2 === 'FINAL') {
         corazones.forEach(c => {
-          c.y += c.vel;
-          c.x += Math.sin(frameContador * 0.06 + c.swing) * 0.8;
+          c.y += c.vel * dt;
+          c.x += Math.sin(frameContador * 0.06 + c.swing) * 0.8 * dt;
           if (c.y > canvas.height + 40) { c.y = -40; c.x = Math.random() * canvas.width; }
         });
       }
@@ -1525,9 +1525,14 @@
 
 
     // ─── GAME LOOP ───────────────────────────────────────────────────────────────
-    function loopPrueba() {
+    function loopPrueba(now = performance.now()) {
+      // Delta-time: escala toda la lógica al tiempo real transcurrido.
+      // En 60fps dt≈1, en 30fps dt≈2, así todo corre igual de rápido.
+      dt       = lastTime ? Math.min((now - lastTime) / (1000 / 60), 3) : 1;
+      lastTime = now;
+
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      frameContador++; // avanza siempre, en todos los estados (para animaciones)
+      frameContador += dt;
 
       dibujarCielo();     // fondo dinámico: gradiente día/noche + sol (también actualiza alfaEstrellas)
       dibujarEstrellas(); // estrellas sobre el fondo (con la opacidad del momento del día)
@@ -1536,7 +1541,7 @@
         velocidadMundo = Math.min(VEL_MUNDO_MAX, VEL_MUNDO_BASE + Math.sqrt(score) * 0.05);
         actualizarFisica();
         actualizarObstaculos();
-        score++;
+        score += dt;
 
         if (detectarColision()) {
           partidasJugadas++;
@@ -1574,7 +1579,7 @@
 
     ajustarTamano();
     window.addEventListener('resize', ajustarTamano);
-    loopPrueba();
+    requestAnimationFrame(loopPrueba);
 
     canvas.addEventListener('touchstart', function(evento) {
       evento.preventDefault();
