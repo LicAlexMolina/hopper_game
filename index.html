@@ -752,18 +752,16 @@
       ctx.save();
       ctx.textAlign   = 'center';
 
-      // Número grande centrado
-      ctx.font        = '700 38px "Orbitron", sans-serif';
+      ctx.font        = '700 44px "Orbitron", sans-serif';
       ctx.fillStyle   = '#E8F1FF';
       ctx.shadowColor = '#00E5FF';
-      ctx.shadowBlur  = 18;
-      ctx.fillText(Math.floor(score), canvas.width / 2, 100);
+      ctx.shadowBlur  = 20;
+      ctx.fillText(Math.floor(score), canvas.width / 2, 102);
 
-      // Etiqueta pequeña debajo
-      ctx.font        = '500 14px "Orbitron", sans-serif';
+      ctx.font        = '500 15px "Orbitron", sans-serif';
       ctx.fillStyle   = '#00E5FF';
       ctx.shadowBlur  = 6;
-      ctx.fillText('M E T R O S', canvas.width / 2, 120);
+      ctx.fillText('M E T R O S', canvas.width / 2, 124);
 
       ctx.restore();
     }
@@ -803,19 +801,19 @@
       const cy = canvas.height / 2;
       ctx.textAlign = 'center';
 
-      ctx.font        = '700 24px "Orbitron", sans-serif';
+      ctx.font        = '700 26px "Orbitron", sans-serif';
       ctx.fillStyle   = '#FF2E92';
       ctx.shadowColor = '#FF2E92';
-      ctx.shadowBlur  = 18;
-      ctx.fillText('TU HOPPER FUE DESTRUIDO', cx, cy - 30);
+      ctx.shadowBlur  = 20;
+      ctx.fillText('TU HOPPER FUE DESTRUIDO', cx, cy - 36);
 
-      ctx.font        = '500 26px "Orbitron", sans-serif';
+      ctx.font        = '700 32px "Orbitron", sans-serif';
       ctx.fillStyle   = '#FFD166';
       ctx.shadowColor = '#FFD166';
-      ctx.shadowBlur  = 10;
-      ctx.fillText(Math.floor(score) + ' m', cx, cy + 18);
+      ctx.shadowBlur  = 12;
+      ctx.fillText(Math.floor(score) + ' m', cx, cy + 16);
 
-      ctx.font        = '600 18px "Rajdhani", sans-serif';
+      ctx.font        = '600 20px "Rajdhani", sans-serif';
       ctx.fillStyle   = '#E8F1FF';
       ctx.shadowBlur  = 0;
       ctx.fillText('TOCA PARA REINICIAR', cx, cy + 58);
@@ -834,34 +832,34 @@
       ctx.textAlign = 'center';
 
       // Título principal
-      ctx.font        = '900 50px "Orbitron", sans-serif';
+      ctx.font        = '900 52px "Orbitron", sans-serif';
       ctx.fillStyle   = '#E8F1FF';
       ctx.shadowColor = '#00E5FF';
-      ctx.shadowBlur  = 28;
-      ctx.fillText('H O P P E R', cx, cy - 44);
+      ctx.shadowBlur  = 30;
+      ctx.fillText('H O P P E R', cx, cy - 50);
 
       // Subtítulo
-      ctx.font        = '500 15px "Orbitron", sans-serif';
+      ctx.font        = '500 17px "Orbitron", sans-serif';
       ctx.fillStyle   = '#00E5FF';
-      ctx.shadowBlur  = 8;
-      ctx.fillText('A V E N T U R A   S I N   F I N', cx, cy - 6);
+      ctx.shadowBlur  = 10;
+      ctx.fillText('A V E N T U R A   S I N   F I N', cx, cy - 10);
 
       // Separador decorativo tipo HUD
       ctx.shadowBlur  = 0;
       ctx.strokeStyle = 'rgba(0, 229, 255, 0.35)';
       ctx.lineWidth   = 1;
       ctx.beginPath();
-      ctx.moveTo(cx - 90, cy + 18);
-      ctx.lineTo(cx + 90, cy + 18);
+      ctx.moveTo(cx - 100, cy + 12);
+      ctx.lineTo(cx + 100, cy + 12);
       ctx.stroke();
 
       const pulso = 0.5 + 0.5 * Math.sin(frameContador * 0.07);
       ctx.globalAlpha = 0.35 + 0.65 * pulso;
-      ctx.font        = '600 19px "Rajdhani", sans-serif';
+      ctx.font        = '600 21px "Rajdhani", sans-serif';
       ctx.fillStyle   = '#E8F1FF';
       ctx.shadowColor = '#E8F1FF';
-      ctx.shadowBlur  = 4;
-      ctx.fillText('TOCA PARA COMENZAR', cx, cy + 58);
+      ctx.shadowBlur  = 5;
+      ctx.fillText('TOCA PARA COMENZAR', cx, cy + 56);
       ctx.globalAlpha = 1;
 
       ctx.restore();
@@ -883,12 +881,16 @@
     // ─── CAPÍTULO 2 — FUNCIONES ──────────────────────────────────────────────────
     function reposicionarNo() {
       const cx = canvas.width / 2, cy = canvas.height / 2;
+      const nW = 110, nH = 48;
       let nx, ny, intentos = 0;
+      const siCX = cx, siCY = cy + 46;
       do {
-        nx = 60 + Math.random() * (canvas.width  - 180);
-        ny = cy  + Math.random() * (canvas.height * 0.28);
+        nx = 40 + Math.random() * (canvas.width - nW - 80);
+        ny = cy + 8  + Math.random() * (canvas.height * 0.30);
         intentos++;
-      } while (intentos < 20 && Math.abs(nx - cx) < 120 && Math.abs(ny - (cy + 55)) < 70);
+      } while (intentos < 20
+        && Math.abs((nx + nW/2) - siCX) < 140
+        && Math.abs((ny + nH/2) - siCY) < 75);
       btnNoPosX = nx;
       btnNoPosY = ny;
     }
@@ -1317,44 +1319,44 @@
           ctx.globalAlpha = intAlpha;
         }
 
-        // "¡Hopper! ¿Qué haces aquí...?" — reacción de Elena (aparece y luego se va)
+        // "¡Alex! ¿Qué haces aquí...?" — reacción de Elena (aparece y luego se va)
         const reactAlpha = (() => {
           if (f < INT_FULL) return 0;
           if (f < PROPOSAL)  return Math.min(1, (f - INT_FULL) / 45);
-          return Math.max(0, 1 - (f - PROPOSAL) / 40);
+          return Math.max(0, 1 - (f - PROPOSAL) / 35);
         })();
         if (reactAlpha > 0) {
           ctx.globalAlpha = intAlpha * reactAlpha;
-          ctx.font = '600 17px "Rajdhani", sans-serif';
-          ctx.fillStyle = '#FFE8F5'; ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 8;
-          ctx.fillText('¡Alex! ¿Qué haces aquí...?', cxP, H * 0.14);
+          ctx.font = '600 19px "Rajdhani", sans-serif';
+          ctx.fillStyle = '#FFE8F5'; ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 10;
+          ctx.fillText('¡Alex! ¿Qué haces aquí...?', cxP, H * 0.15);
           ctx.shadowBlur = 0;
         }
 
         // ── Texto de la propuesta (aparece secuencialmente) ──
         if (f >= PROPOSAL) {
-          // "Elena..."
+          // "Elena..." — posición distinta al react text para evitar encimamiento
           ctx.globalAlpha = intAlpha * Math.min(1, (f - PROPOSAL) / 50);
-          ctx.font = '700 26px "Orbitron", sans-serif';
-          ctx.fillStyle = '#FFD166'; ctx.shadowColor = '#FFD166'; ctx.shadowBlur = 16;
-          ctx.fillText('Elena...', cxP, H * 0.14);
+          ctx.font = '700 28px "Orbitron", sans-serif';
+          ctx.fillStyle = '#FFD166'; ctx.shadowColor = '#FFD166'; ctx.shadowBlur = 18;
+          ctx.fillText('Elena...', cxP, H * 0.11);
           ctx.shadowBlur = 0;
 
           // "¿Quieres ser mi novia?"
           if (f >= PROPOSAL + 65) {
             ctx.globalAlpha = intAlpha * Math.min(1, (f - PROPOSAL - 65) / 55);
-            ctx.font = '700 23px "Orbitron", sans-serif';
+            ctx.font = '700 24px "Orbitron", sans-serif';
             ctx.fillStyle = '#FFFFFF'; ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 14;
-            ctx.fillText('¿Quieres ser mi novia?', cxP, H * 0.22);
+            ctx.fillText('¿Quieres ser mi novia?', cxP, H * 0.20);
             ctx.shadowBlur = 0;
           }
 
           // "— con todo mi cariño, Alex 🦫"
           if (f >= PROPOSAL + 120) {
             ctx.globalAlpha = intAlpha * Math.min(1, (f - PROPOSAL - 120) / 55);
-            ctx.font = '400 17px "Rajdhani", sans-serif';
+            ctx.font = '500 19px "Rajdhani", sans-serif';
             ctx.fillStyle = '#D8D0FF';
-            ctx.fillText('— con todo mi cariño, Alex  🦫', cxP, H * 0.30);
+            ctx.fillText('— con todo mi cariño, Alex  🦫', cxP, H * 0.28);
           }
         }
 
@@ -1412,15 +1414,15 @@
 
         const a1 = Math.min(1, cap2Frame / 45);
         ctx.globalAlpha = a1;
-        ctx.font        = '700 36px "Orbitron", sans-serif';
+        ctx.font        = '700 40px "Orbitron", sans-serif';
         ctx.fillStyle   = '#FFD166';
-        ctx.shadowColor = '#FFD166'; ctx.shadowBlur = 18;
-        ctx.fillText('Elena...', cx, cy - 25);
+        ctx.shadowColor = '#FFD166'; ctx.shadowBlur = 22;
+        ctx.fillText('Elena...', cx, cy - 32);
         ctx.shadowBlur  = 0;
 
         if (cap2Frame > 75) {
           ctx.globalAlpha = Math.min(1, (cap2Frame - 75) / 45);
-          ctx.font        = '500 22px "Rajdhani", sans-serif';
+          ctx.font        = '500 24px "Rajdhani", sans-serif';
           ctx.fillStyle   = '#E8F1FF';
           ctx.fillText('tengo algo que decirte...', cx, cy + 22);
         }
@@ -1490,19 +1492,19 @@
         dibujarCastorEn3D(cx - 22, horizonY + 14 - bop, ESC, 0, true);
         dibujarElena(    cx + 22, horizonY + 14,         ESC);
 
-        ctx.font        = '700 26px "Orbitron", sans-serif';
+        ctx.font        = '700 28px "Orbitron", sans-serif';
         ctx.fillStyle   = '#FFD166';
-        ctx.shadowColor = '#FFD166'; ctx.shadowBlur = 16;
-        ctx.fillText('Elena...', cx, cy - 88);
+        ctx.shadowColor = '#FFD166'; ctx.shadowBlur = 18;
+        ctx.fillText('Elena...', cx, cy - 98);
         ctx.shadowBlur  = 0;
-        ctx.font        = '700 23px "Orbitron", sans-serif';
+        ctx.font        = '700 24px "Orbitron", sans-serif';
         ctx.fillStyle   = '#FFFFFF';
-        ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 12;
-        ctx.fillText('¿Quieres ser mi novia?', cx, cy - 52);
+        ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 14;
+        ctx.fillText('¿Quieres ser mi novia?', cx, cy - 58);
         ctx.shadowBlur  = 0;
-        ctx.font        = '400 17px "Rajdhani", sans-serif';
+        ctx.font        = '500 19px "Rajdhani", sans-serif';
         ctx.fillStyle   = '#D8D0FF';
-        ctx.fillText('— con todo mi cariño, Alex  🦫', cx, cy - 22);
+        ctx.fillText('— con todo mi cariño, Alex  🦫', cx, cy - 24);
 
         const pulso = 0.88 + 0.12 * Math.sin(frameContador * 0.1);
         ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 22 * pulso;
@@ -1513,13 +1515,14 @@
         ctx.fillStyle   = '#FFFFFF';
         ctx.fillText('SÍ  ❤', cx, cy + 53);
 
-        ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 6;
-        ctx.fillStyle   = 'rgba(60,60,60,0.75)';
-        ctx.beginPath(); ctx.roundRect(btnNoPosX, btnNoPosY, 90, 40, 8); ctx.fill();
+        ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 8;
+        ctx.fillStyle   = 'rgba(55,55,60,0.78)';
+        ctx.strokeStyle = 'rgba(180,180,180,0.18)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.roundRect(btnNoPosX, btnNoPosY, 110, 48, 10); ctx.fill(); ctx.stroke();
         ctx.shadowBlur  = 0;
-        ctx.font        = '600 15px "Rajdhani", sans-serif';
-        ctx.fillStyle   = '#AAAAAA';
-        ctx.fillText('No', btnNoPosX + 45, btnNoPosY + 26);
+        ctx.font        = '600 17px "Rajdhani", sans-serif';
+        ctx.fillStyle   = '#BBBBBB';
+        ctx.fillText('No', btnNoPosX + 55, btnNoPosY + 30);
 
       // ── CELEBRACION ──
       } else if (estadoCap2 === 'CELEBRACION') {
@@ -1538,14 +1541,14 @@
 
         const fi = Math.min(1, cap2Frame / 50);
         ctx.globalAlpha = fi;
-        ctx.font        = '900 50px "Orbitron", sans-serif';
+        ctx.font        = '900 58px "Orbitron", sans-serif';
         ctx.fillStyle   = '#FF2E92';
-        ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 32;
-        ctx.fillText('¡Sí!', cx, cy - 18);
+        ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 36;
+        ctx.fillText('¡Sí!', cx, cy - 22);
         ctx.shadowBlur  = 0;
-        ctx.font        = '600 18px "Rajdhani", sans-serif';
+        ctx.font        = '600 22px "Rajdhani", sans-serif';
         ctx.fillStyle   = '#FFD166';
-        ctx.fillText('Elena  ❤  Alex', cx, cy + 28);
+        ctx.fillText('Elena  ❤  Alex', cx, cy + 32);
         ctx.globalAlpha = 1;
       }
 
@@ -1849,14 +1852,19 @@
         }
         // PROPUESTA_BOTONES → SÍ / NO
         if (estadoCap2 === 'PROPUESTA_BOTONES') {
-          const tX = evento.touches[0].clientX;
-          const tY = evento.touches[0].clientY;
+          const rect   = canvas.getBoundingClientRect();
+          const scaleX = canvas.width  / rect.width;
+          const scaleY = canvas.height / rect.height;
+          const tX = (evento.touches[0].clientX - rect.left) * scaleX;
+          const tY = (evento.touches[0].clientY - rect.top)  * scaleY;
           const cx = canvas.width / 2, cy = canvas.height / 2;
           if (tX >= cx - 75 && tX <= cx + 75 && tY >= cy + 20 && tY <= cy + 72) {
             iniciarCelebracion();
             return;
           }
-          if (tX >= btnNoPosX && tX <= btnNoPosX + 90 && tY >= btnNoPosY && tY <= btnNoPosY + 40) {
+          const pad = 24; // generoso para que el NO sea fácil de tocar
+          if (tX >= btnNoPosX - pad && tX <= btnNoPosX + 110 + pad
+           && tY >= btnNoPosY - pad && tY <= btnNoPosY + 48  + pad) {
             reposicionarNo();
           }
           return;
