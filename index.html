@@ -110,13 +110,6 @@
       text-align: center;
       box-shadow: 0 0 48px rgba(255,46,146,0.18), 0 8px 32px rgba(0,0,0,0.5);
     }
-    #fecha-cap-label {
-      font-family: 'Orbitron', sans-serif;
-      font-size: 11px;
-      letter-spacing: 3px;
-      color: rgba(255,209,102,0.7);
-      margin-bottom: 14px;
-    }
     #fecha-titulo {
       font-family: 'Orbitron', sans-serif;
       font-size: 19px;
@@ -183,7 +176,6 @@
   <!-- Capítulo 3: selector de fecha oficial -->
   <div id="fecha-overlay">
     <div id="fecha-card">
-      <div id="fecha-cap-label">✦ CAPÍTULO 3 ✦</div>
       <h2 id="fecha-titulo">¿Cuándo empieza nuestra historia?</h2>
       <p id="fecha-sub">Elige la fecha oficial de inicio  ❤</p>
       <input type="date" id="fecha-input">
@@ -196,8 +188,8 @@
     const ctx    = canvas.getContext('2d');
 
     // ─── CAPÍTULO 3: precarga de fotos ────────────────────────────────────────────
-    const imgsCap3 = ['images/pic1.png','images/pic2.jpg','images/pic3.jpg',
-                      'images/pic4.jpg','images/pic5.jpg','images/pic6.jpg']
+    const imgsCap3 = ['images/pic1.webp','images/pic2.webp','images/pic3.webp',
+                      'images/pic4.webp','images/pic5.webp','images/pic6.webp']
       .map(src => { const i = new Image(); i.src = src; return i; });
 
     const fechaOverlay = document.getElementById('fecha-overlay');
@@ -790,35 +782,67 @@
     let estadoCap3    = 'FOTOS';   // FOTOS | FECHA_INPUT | FECHA_FINAL
     let cap3Frame     = 0;
     let fotoActual    = 0;
+    let fotoAnterior  = -1;
     let fotoFadeIn    = 0;
     let fechaNoviazgo = localStorage.getItem('hopper_fecha') || '';
 
+    let screenShake   = 0; // frames de vibración al morir
+    const SAFE_W      = () => canvas.width  * 0.88;
+    const SAFE_H      = () => canvas.height * 0.88;
+    const SAFE_PAD    = () => canvas.width  * 0.06;
+
+    // Dibuja texto siempre dentro del ancho seguro (sin squish excesivo, solo si rebasa)
+    function safeText(text, x, y, maxW) {
+      const mw = maxW ?? SAFE_W();
+      ctx.fillText(text, x, y, mw);
+    }
+
     function dibujarGameOver() {
-      // Overlay semi-transparente — deja ver el mundo congelado debajo
       ctx.save();
-      ctx.fillStyle = 'rgba(5, 6, 10, 0.78)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Sacudida de pantalla al morir
+      if (screenShake > 0) {
+        const sx = (Math.random() - 0.5) * screenShake * 3;
+        const sy = (Math.random() - 0.5) * screenShake * 3;
+        ctx.translate(sx, sy);
+        screenShake = Math.max(0, screenShake - 0.6 * dt);
+      }
+
+      ctx.fillStyle = 'rgba(5, 6, 10, 0.82)';
+      ctx.fillRect(-20, -20, canvas.width + 40, canvas.height + 40);
 
       const cx = canvas.width  / 2;
       const cy = canvas.height / 2;
       ctx.textAlign = 'center';
 
-      ctx.font        = '700 26px "Orbitron", sans-serif';
+      // Flash rojo al momento de morir
+      const flashA = Math.max(0, 1 - frameContador * 0.04);
+      if (flashA > 0) {
+        ctx.globalAlpha = flashA * 0.35;
+        ctx.fillStyle   = '#FF2E92';
+        ctx.fillRect(-20, -20, canvas.width + 40, canvas.height + 40);
+        ctx.globalAlpha = 1;
+      }
+
+      ctx.font        = '700 22px "Orbitron", sans-serif';
       ctx.fillStyle   = '#FF2E92';
       ctx.shadowColor = '#FF2E92';
       ctx.shadowBlur  = 20;
-      ctx.fillText('TU HOPPER FUE DESTRUIDO', cx, cy - 36);
+      safeText('TU HOPPER FUE DESTRUIDO', cx, cy - 38);
 
-      ctx.font        = '700 32px "Orbitron", sans-serif';
+      ctx.font        = '900 36px "Orbitron", sans-serif';
       ctx.fillStyle   = '#FFD166';
       ctx.shadowColor = '#FFD166';
-      ctx.shadowBlur  = 12;
-      ctx.fillText(Math.floor(score) + ' m', cx, cy + 16);
+      ctx.shadowBlur  = 14;
+      safeText(Math.floor(score) + ' m', cx, cy + 14);
 
-      ctx.font        = '600 20px "Rajdhani", sans-serif';
+      const blinkA = 0.55 + 0.45 * Math.sin(frameContador * 0.09);
+      ctx.globalAlpha = blinkA;
+      ctx.font        = '600 19px "Rajdhani", sans-serif';
       ctx.fillStyle   = '#E8F1FF';
       ctx.shadowBlur  = 0;
-      ctx.fillText('TOCA PARA REINICIAR', cx, cy + 58);
+      safeText('TOCA PARA REINICIAR', cx, cy + 56);
+      ctx.globalAlpha = 1;
 
       ctx.restore();
     }
@@ -838,13 +862,13 @@
       ctx.fillStyle   = '#E8F1FF';
       ctx.shadowColor = '#00E5FF';
       ctx.shadowBlur  = 30;
-      ctx.fillText('H O P P E R', cx, cy - 50);
+      safeText('H O P P E R', cx, cy - 50);
 
       // Subtítulo
-      ctx.font        = '500 17px "Orbitron", sans-serif';
+      ctx.font        = '500 15px "Orbitron", sans-serif';
       ctx.fillStyle   = '#00E5FF';
       ctx.shadowBlur  = 10;
-      ctx.fillText('A V E N T U R A   S I N   F I N', cx, cy - 10);
+      safeText('A V E N T U R A   S I N   F I N', cx, cy - 10);
 
       // Separador decorativo tipo HUD
       ctx.shadowBlur  = 0;
@@ -926,11 +950,12 @@
     }
 
     function iniciarCapitulo3() {
-      estadoJuego = 'CAPITULO_3';
-      estadoCap3  = 'FOTOS';
-      cap3Frame   = 0;
-      fotoActual  = 0;
-      fotoFadeIn  = 0;
+      estadoJuego  = 'CAPITULO_3';
+      estadoCap3   = 'FOTOS';
+      cap3Frame    = 0;
+      fotoActual   = 0;
+      fotoAnterior = -1;
+      fotoFadeIn   = 0;
     }
 
     function formatearFecha(s) {
@@ -1149,8 +1174,7 @@
       const DOOR_END   = 160;  // puerta completamente abierta
       const FADE_INT   = 195;  // empieza cross-fade a interior
       const INT_FULL   = 235;  // interior completamente visible
-      const PROPOSAL   = 330;  // comienza texto de propuesta
-      const TAP_READY  = 470;  // aparece TOCA PARA CONTINUAR
+      const TAP_READY  = 295;  // aparece TOCA PARA CONTINUAR (antes del DIALOGO_PREVIO)
 
       const doorOpen  = f >= KNOCK_END ? Math.min(1, (f - KNOCK_END) / (DOOR_END  - KNOCK_END)) : 0;
       const enterT    = f >= DOOR_END  ? Math.min(1, (f - DOOR_END)  / (FADE_INT  - DOOR_END))  : 0;
@@ -1341,45 +1365,23 @@
           ctx.globalAlpha = intAlpha;
         }
 
-        // "¡Alex! ¿Qué haces aquí...?" — reacción de Elena (aparece y luego se va)
-        const reactAlpha = (() => {
-          if (f < INT_FULL) return 0;
-          if (f < PROPOSAL)  return Math.min(1, (f - INT_FULL) / 45);
-          return Math.max(0, 1 - (f - PROPOSAL) / 35);
-        })();
-        if (reactAlpha > 0) {
-          ctx.globalAlpha = intAlpha * reactAlpha;
-          ctx.font = '600 23px "Rajdhani", sans-serif';
+        // "¡Alex! ¿Qué haces aquí...?" — reacción de Elena
+        if (f >= INT_FULL) {
+          const reactA = Math.min(1, (f - INT_FULL) / 45);
+          ctx.globalAlpha = intAlpha * reactA;
+          ctx.font = '600 24px "Rajdhani", sans-serif';
           ctx.fillStyle = '#FFE8F5'; ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 10;
-          ctx.fillText('¡Alex! ¿Qué haces aquí...?', cxP, H * 0.16);
+          safeText('¡Alex! ¿Qué haces aquí...?', cxP, H * 0.14);
           ctx.shadowBlur = 0;
         }
 
-        // ── Texto de la propuesta (aparece secuencialmente) ──
-        if (f >= PROPOSAL) {
-          // "Elena..." — posición distinta al react text para evitar encimamiento
-          ctx.globalAlpha = intAlpha * Math.min(1, (f - PROPOSAL) / 50);
-          ctx.font = '700 30px "Orbitron", sans-serif';
-          ctx.fillStyle = '#FFD166'; ctx.shadowColor = '#FFD166'; ctx.shadowBlur = 18;
-          ctx.fillText('Elena...', cxP, H * 0.10);
-          ctx.shadowBlur = 0;
-
-          // "¿Quieres ser mi novia?"
-          if (f >= PROPOSAL + 65) {
-            ctx.globalAlpha = intAlpha * Math.min(1, (f - PROPOSAL - 65) / 55);
-            ctx.font = '700 26px "Orbitron", sans-serif';
-            ctx.fillStyle = '#FFFFFF'; ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 14;
-            ctx.fillText('¿Quieres ser mi novia?', cxP, H * 0.21);
-            ctx.shadowBlur = 0;
-          }
-
-          // "— con todo mi cariño, Alex 🦫"
-          if (f >= PROPOSAL + 120) {
-            ctx.globalAlpha = intAlpha * Math.min(1, (f - PROPOSAL - 120) / 55);
-            ctx.font = '500 22px "Rajdhani", sans-serif';
-            ctx.fillStyle = '#D8D0FF';
-            ctx.fillText('— con todo mi cariño, Alex  🦫', cxP, H * 0.30);
-          }
+        // "tengo algo que decirte..." — aparece después de la reacción
+        if (f >= INT_FULL + 55) {
+          const subA = Math.min(1, (f - INT_FULL - 55) / 40);
+          ctx.globalAlpha = intAlpha * subA;
+          ctx.font = '500 18px "Rajdhani", sans-serif';
+          ctx.fillStyle = 'rgba(200,160,255,0.85)';
+          safeText('tengo algo que decirte...', cxP, H * 0.21);
         }
 
         ctx.globalAlpha = intAlpha;
@@ -1587,25 +1589,34 @@
         ctx.font        = '700 28px "Orbitron", sans-serif';
         ctx.fillStyle   = '#FFD166';
         ctx.shadowColor = '#FFD166'; ctx.shadowBlur = 18;
-        ctx.fillText('Elena...', cx, cy - 98);
+        safeText('Elena...', cx, cy - 98);
         ctx.shadowBlur  = 0;
         ctx.font        = '700 24px "Orbitron", sans-serif';
         ctx.fillStyle   = '#FFFFFF';
         ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 14;
-        ctx.fillText('¿Quieres ser mi novia?', cx, cy - 58);
+        safeText('¿Quieres ser mi novia?', cx, cy - 58);
         ctx.shadowBlur  = 0;
         ctx.font        = '500 19px "Rajdhani", sans-serif';
         ctx.fillStyle   = '#D8D0FF';
-        ctx.fillText('— con todo mi cariño, Alex  🦫', cx, cy - 24);
+        safeText('— con todo mi cariño, Alex  🦫', cx, cy - 24);
 
         const pulso = 0.88 + 0.12 * Math.sin(frameContador * 0.1);
         ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 22 * pulso;
         ctx.fillStyle   = '#FF2E92';
         ctx.beginPath(); ctx.roundRect(cx - 75, cy + 20, 150, 52, 12); ctx.fill();
+        // Shimmer en el botón SÍ
+        const siBtnShimX = (frameContador * 2.2) % 220 - 30;
+        const siShim = ctx.createLinearGradient(cx - 75 + siBtnShimX - 30, cy + 20,
+                                                  cx - 75 + siBtnShimX + 30, cy + 20);
+        siShim.addColorStop(0, 'rgba(255,255,255,0)');
+        siShim.addColorStop(0.5, 'rgba(255,255,255,0.22)');
+        siShim.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = siShim;
+        ctx.beginPath(); ctx.roundRect(cx - 75, cy + 20, 150, 52, 12); ctx.fill();
         ctx.shadowBlur  = 0;
         ctx.font        = '700 22px "Orbitron", sans-serif';
         ctx.fillStyle   = '#FFFFFF';
-        ctx.fillText('SÍ  ❤', cx, cy + 53);
+        safeText('SÍ  ❤', cx, cy + 53);
 
         ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 8;
         ctx.fillStyle   = 'rgba(55,55,60,0.78)';
@@ -1671,63 +1682,77 @@
         ctx.fillStyle = '#06040F';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        const img = imgsCap3[fotoActual];
-        if (img.complete && img.naturalWidth > 0) {
-          const padT = 68, padB = 90;
-          const aw = canvas.width - 32, ah = canvas.height - padT - padB;
-          const scale = Math.min(aw / img.naturalWidth, ah / img.naturalHeight);
-          const kb  = 1 + Math.min(cap3Frame * 0.00022, 0.055); // Ken Burns sutil
-          const dw  = img.naturalWidth * scale * kb;
-          const dh  = img.naturalHeight * scale * kb;
-          const dx  = cx - dw / 2, dy = padT + ah / 2 - dh / 2;
+        const padT = 68, padB = 90;
+        const aw = canvas.width - 32, ah = canvas.height - padT - padB;
 
-          ctx.globalAlpha = fotoFadeIn;
+        // Función para dibujar una foto con Ken Burns + pan direccional
+        const drawPhoto = (imgIdx, alpha, frameOffset) => {
+          const im = imgsCap3[imgIdx];
+          if (!im || !im.complete || !im.naturalWidth) return;
+          const sc   = Math.min(aw / im.naturalWidth, ah / im.naturalHeight);
+          const kbf  = Math.min(frameOffset * 0.00025, 0.07);  // más movimiento
+          const kb   = 1 + kbf;
+          const panD = imgIdx % 2 === 0 ? 1 : -1;             // alterna dirección
+          const panX = Math.min(frameOffset * 0.055, 22) * panD;
+          const panY = Math.min(frameOffset * 0.018, 8);       // leve bajada
+          const dw   = im.naturalWidth  * sc * kb;
+          const dh   = im.naturalHeight * sc * kb;
+          const dx   = cx - dw / 2 + panX;
+          const dy   = padT + ah / 2 - dh / 2 + panY;
+          ctx.globalAlpha = alpha;
           ctx.save();
-          ctx.beginPath();
-          ctx.roundRect(16, padT, aw, ah, 14);
-          ctx.clip();
-          ctx.drawImage(img, dx, dy, dw, dh);
+          ctx.beginPath(); ctx.roundRect(16, padT, aw, ah, 14); ctx.clip();
+          ctx.drawImage(im, dx, dy, dw, dh);
           ctx.restore();
+        };
 
-          // Viñeta
-          const vig = ctx.createRadialGradient(cx, padT + ah/2, Math.min(aw,ah)*0.28,
-                                                cx, padT + ah/2, Math.max(aw,ah)*0.75);
+        // Foto anterior saliendo (crossfade)
+        if (fotoAnterior >= 0 && fotoFadeIn < 0.92) {
+          drawPhoto(fotoAnterior, Math.max(0, 1 - fotoFadeIn * 1.25), 9999);
+        }
+        // Foto actual entrando
+        drawPhoto(fotoActual, fotoFadeIn, cap3Frame);
+
+        // Viñeta cinematográfica (pulsante sutil)
+        if (fotoFadeIn > 0.1) {
+          const vigPulse = 0.50 + 0.08 * Math.sin(frameContador * 0.04);
+          const vig = ctx.createRadialGradient(cx, padT + ah/2, Math.min(aw,ah)*0.22,
+                                                cx, padT + ah/2, Math.max(aw,ah)*0.78);
           vig.addColorStop(0, 'rgba(0,0,0,0)');
-          vig.addColorStop(1, 'rgba(0,0,0,0.58)');
+          vig.addColorStop(1, `rgba(0,0,0,${vigPulse})`);
+          ctx.globalAlpha = fotoFadeIn;
           ctx.fillStyle = vig;
           ctx.fillRect(16, padT, aw, ah);
           ctx.globalAlpha = 1;
         }
 
-        // Etiqueta superior
-        ctx.font      = '500 11px "Rajdhani", sans-serif';
-        ctx.fillStyle = 'rgba(200,160,255,0.60)';
-        ctx.fillText('CAPÍTULO 3  ·  NUESTRA HISTORIA', cx, 26);
+        // Barras de cine arriba y abajo (letterbox dinámico)
+        ctx.fillStyle = '#06040F';
+        ctx.fillRect(0, 0, canvas.width, padT);
+        ctx.fillRect(0, canvas.height - padB, canvas.width, padB);
 
-        // Contador (arriba derecha)
-        ctx.font      = '500 13px "Orbitron", sans-serif';
-        ctx.fillStyle = 'rgba(255,255,255,0.5)';
-        ctx.textAlign = 'right';
-        ctx.fillText(`${fotoActual + 1} / ${imgsCap3.length}`, canvas.width - 20, 50);
-        ctx.textAlign = 'center';
-
-        // Puntos de progreso
+        // Puntos de progreso (más grandes y animados)
         for (let i = 0; i < imgsCap3.length; i++) {
-          const dotX = cx + (i - (imgsCap3.length - 1) / 2) * 18;
+          const dotX  = cx + (i - (imgsCap3.length - 1) / 2) * 22;
+          const dotY  = canvas.height - 60;
+          const isCur = i === fotoActual;
+          const pulse = isCur ? 1 + 0.2 * Math.sin(frameContador * 0.12) : 1;
           ctx.beginPath();
-          ctx.arc(dotX, canvas.height - 55, i === fotoActual ? 5.5 : 3, 0, Math.PI * 2);
-          ctx.fillStyle = i === fotoActual ? '#FF2E92' : 'rgba(255,255,255,0.28)';
+          ctx.arc(dotX, dotY, isCur ? 6 * pulse : 3.5, 0, Math.PI * 2);
+          ctx.fillStyle = isCur ? '#FF2E92' : 'rgba(255,255,255,0.30)';
+          if (isCur) { ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 10; }
           ctx.fill();
+          ctx.shadowBlur = 0;
         }
 
         // Prompt de toque (pulsante)
         if (fotoFadeIn > 0.55) {
-          const pulso = 0.38 + 0.62 * Math.sin(frameContador * 0.08);
-          ctx.globalAlpha = pulso * fotoFadeIn;
+          const pulso = 0.40 + 0.60 * Math.sin(frameContador * 0.08);
+          ctx.globalAlpha = pulso * Math.min(1, (fotoFadeIn - 0.55) / 0.35);
           ctx.font      = '600 16px "Rajdhani", sans-serif';
           ctx.fillStyle = '#E8F1FF';
           const label = fotoActual < imgsCap3.length - 1 ? '✦  TOCA PARA CONTINUAR  ✦' : '✦  Y DESPUÉS...  ✦';
-          ctx.fillText(label, cx, canvas.height - 24);
+          safeText(label, cx, canvas.height - 30);
           ctx.globalAlpha = 1;
         }
 
@@ -1823,27 +1848,72 @@
         ctx.fillStyle = 'rgba(200,160,255,0.85)';
         ctx.fillText('OFICIALMENTE NOVIOS DESDE EL', cx, topSection + 90);
 
-        // La fecha: día grande, mes y año abajo
-        const fecha = formatearFecha(fechaNoviazgo);
-        const dayFontSize = Math.min(72, canvas.width * 0.18);
-        const dateBaseY   = topSection + 90 + dayFontSize * 1.1;
-        ctx.font        = `900 ${dayFontSize}px "Orbitron", sans-serif`;
-        ctx.fillStyle   = '#FFFFFF';
-        ctx.shadowColor = '#FFD166'; ctx.shadowBlur = 28;
-        ctx.fillText(fecha.dia, cx, dateBaseY);
-        ctx.shadowBlur  = 0;
+        // La fecha: animación pop-in (escala de 0 → 1 con spring suave)
+        const fecha      = formatearFecha(fechaNoviazgo);
+        const datePopRaw = Math.min(1, (cap3Frame - 25) / 45);
+        const datePop    = datePopRaw < 0 ? 0 : 1 - Math.pow(1 - datePopRaw, 3); // ease-out cubic
+        const dateScale  = 0.4 + datePop * 0.6;
 
-        ctx.font      = '700 20px "Orbitron", sans-serif';
-        ctx.fillStyle = '#FFD166';
-        ctx.fillText(fecha.mes, cx, dateBaseY + 34);
+        if (datePop > 0) {
+          ctx.save();
+          ctx.globalAlpha = fi * datePop;
 
-        ctx.font      = '600 17px "Rajdhani", sans-serif';
-        ctx.fillStyle = 'rgba(200,160,255,0.9)';
-        ctx.fillText(fecha.anio, cx, dateBaseY + 58);
+          const dayFontSize = Math.min(72, canvas.width * 0.18);
+          const dateBaseY   = topSection + 90 + dayFontSize * 1.1;
 
-        ctx.font      = '600 18px "Rajdhani", sans-serif';
-        ctx.fillStyle = '#E8D0FF';
-        ctx.fillText('te quiero mucho  ❤', cx, dateBaseY + 82);
+          // Shimmer en el número del día
+          const shimX = (frameContador * 2.8) % (canvas.width + 60) - 30;
+          const shim  = ctx.createLinearGradient(shimX - 28, 0, shimX + 28, 0);
+          shim.addColorStop(0,   'rgba(255,255,255,0)');
+          shim.addColorStop(0.5, 'rgba(255,255,255,0.55)');
+          shim.addColorStop(1,   'rgba(255,255,255,0)');
+
+          ctx.translate(cx, dateBaseY);
+          ctx.scale(dateScale, dateScale);
+          ctx.translate(-cx, -dateBaseY);
+
+          ctx.font        = `900 ${dayFontSize}px "Orbitron", sans-serif`;
+          ctx.fillStyle   = '#FFFFFF';
+          ctx.shadowColor = '#FFD166'; ctx.shadowBlur = 30;
+          ctx.fillText(fecha.dia, cx, dateBaseY);
+          // Shimmer overlay
+          ctx.shadowBlur  = 0;
+          ctx.fillStyle   = shim;
+          ctx.fillText(fecha.dia, cx, dateBaseY);
+
+          ctx.font      = '700 20px "Orbitron", sans-serif';
+          ctx.fillStyle = '#FFD166';
+          ctx.shadowColor = '#FFD166'; ctx.shadowBlur = 10;
+          safeText(fecha.mes, cx, dateBaseY + 34);
+          ctx.shadowBlur = 0;
+
+          ctx.font      = '600 17px "Rajdhani", sans-serif';
+          ctx.fillStyle = 'rgba(200,160,255,0.9)';
+          safeText(fecha.anio, cx, dateBaseY + 58);
+
+          ctx.font      = '600 19px "Rajdhani", sans-serif';
+          ctx.fillStyle = '#E8D0FF';
+          safeText('te quiero mucho  ❤', cx, dateBaseY + 82);
+
+          ctx.restore();
+        }
+
+        // Partículas de destello (estrellas pequeñas flotando)
+        if (cap3Frame > 30) {
+          const nSparks = 12;
+          for (let si = 0; si < nSparks; si++) {
+            const angle  = (si / nSparks) * Math.PI * 2 + frameContador * 0.012;
+            const radius = 55 + 40 * Math.sin(frameContador * 0.04 + si * 0.8);
+            const sx = cx + Math.cos(angle) * radius * 1.8;
+            const sy = (topSection - 10) + Math.sin(angle) * radius * 0.6;
+            const sparkA = (0.3 + 0.7 * Math.sin(frameContador * 0.09 + si)) * fi;
+            ctx.globalAlpha = Math.max(0, sparkA);
+            ctx.fillStyle   = si % 3 === 0 ? '#FFD166' : si % 3 === 1 ? '#FF2E92' : '#E8D0FF';
+            ctx.font        = `${8 + (si % 3) * 4}px serif`;
+            ctx.fillText('✦', sx, sy);
+          }
+          ctx.globalAlpha = fi;
+        }
 
         // Botones: Guardar + Reiniciar lado a lado
         if (cap3Frame > 90) {
@@ -1854,13 +1924,16 @@
           const bX1 = cx - bW - bGap / 2;   // Guardar (izq)
           const bX2 = cx + bGap / 2;          // Reiniciar (der)
 
-          // Guardar
-          ctx.fillStyle   = 'rgba(255,46,146,0.22)';
-          ctx.strokeStyle = 'rgba(255,46,146,0.55)'; ctx.lineWidth = 1.5;
+          // Guardar (pulsa suave)
+          const guardPulse = 0.85 + 0.15 * Math.sin(frameContador * 0.08);
+          ctx.fillStyle   = `rgba(255,46,146,${0.18 * guardPulse})`;
+          ctx.strokeStyle = `rgba(255,46,146,${0.55 * guardPulse})`; ctx.lineWidth = 1.5;
           ctx.beginPath(); ctx.roundRect(bX1, bY, bW, bH, 10); ctx.fill(); ctx.stroke();
           ctx.font      = '600 14px "Rajdhani", sans-serif';
           ctx.fillStyle = '#FF2E92';
-          ctx.fillText('Guardar  ⬇', cx - bW/2 - bGap/2, bY + 27);
+          ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 8 * guardPulse;
+          safeText('Guardar  ⬇', cx - bW/2 - bGap/2, bY + 27);
+          ctx.shadowBlur = 0;
 
           // Reiniciar
           ctx.fillStyle   = 'rgba(30,15,50,0.78)';
@@ -1868,7 +1941,8 @@
           ctx.beginPath(); ctx.roundRect(bX2, bY, bW, bH, 10); ctx.fill(); ctx.stroke();
           ctx.font      = '600 14px "Rajdhani", sans-serif';
           ctx.fillStyle = 'rgba(255,255,255,0.62)';
-          ctx.fillText('Reiniciar', cx + bW/2 + bGap/2, bY + 27);
+          ctx.shadowBlur = 0;
+          safeText('Reiniciar', cx + bW/2 + bGap/2, bY + 27);
         }
 
         ctx.globalAlpha = 1;
@@ -1906,6 +1980,8 @@
             iniciarCapitulo2();
           } else {
             estadoJuego = 'GAME_OVER';
+            screenShake  = 9;
+            frameContador = 0;
           }
         }
       }
@@ -1923,6 +1999,26 @@
 
       if (!enCap) {
         dibujarObstaculos();
+        // Líneas de velocidad (aparecen cuando la velocidad es alta)
+        if (estadoJuego === 'JUGANDO') {
+          const speedT = Math.max(0, (velocidadMundo - VEL_MUNDO_BASE * 1.35) / (VEL_MUNDO_MAX - VEL_MUNDO_BASE * 1.35));
+          if (speedT > 0) {
+            ctx.save();
+            ctx.globalAlpha = speedT * 0.22;
+            ctx.strokeStyle = '#E8F1FF';
+            ctx.lineWidth = 1;
+            const nLines = 8 + Math.floor(speedT * 8);
+            for (let li = 0; li < nLines; li++) {
+              const lx = (((li * 137 + frameContador * (4 + speedT * 6)) % canvas.width));
+              const lLen = 30 + speedT * 60;
+              ctx.beginPath();
+              ctx.moveTo(lx, canvas.height * (0.05 + (li * 0.11) % 0.85));
+              ctx.lineTo(lx - lLen, canvas.height * (0.05 + (li * 0.11) % 0.85));
+              ctx.stroke();
+            }
+            ctx.restore();
+          }
+        }
         dibujarNave();
       }
 
@@ -1951,7 +2047,7 @@
           return;
         }
         // CAMINO → diálogo intermedio antes de la propuesta
-        if (estadoCap2 === 'CAMINO' && cap2Frame >= 710) {
+        if (estadoCap2 === 'CAMINO' && cap2Frame >= 535) {
           estadoCap2 = 'DIALOGO_PREVIO';
           cap2Frame  = 0;
           return;
@@ -1999,6 +2095,7 @@
       if (estadoJuego === 'CAPITULO_3') {
         if (estadoCap3 === 'FOTOS') {
           if (fotoActual < imgsCap3.length - 1) {
+            fotoAnterior = fotoActual;
             fotoActual++;
             fotoFadeIn = 0;
             cap3Frame  = 0;
@@ -2032,8 +2129,11 @@
             propuestaAceptada = false;
             localStorage.setItem('hopper_partidas', '0');
             localStorage.removeItem('hopper_si');
-            estadoCap2 = 'INTRO';
-            estadoCap3 = 'FOTOS';
+            estadoCap2   = 'INTRO';
+            estadoCap3   = 'FOTOS';
+            fotoActual   = 0;
+            fotoAnterior = -1;
+            fotoFadeIn   = 0;
             reiniciarJuego();
             estadoJuego = 'INICIO';
           }
