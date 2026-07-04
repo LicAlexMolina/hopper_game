@@ -2,13 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <!--
-    Esta línea es CRÍTICA para mobile-first.
-    width=device-width: el ancho de la página = ancho real del celular (no un "zoom out" raro).
-    initial-scale=1, maximum-scale=1, user-scalable=no: evita que el usuario haga
-    pinch-zoom mientras intenta tocar la pantalla para saltar. Sin esto, cada "tap"
-    podría interpretarse como un gesto de zoom y arruinar el control del juego.
-  -->
+  <!-- viewport mobile-first: sin zoom para que el tap sea preciso -->
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Hopper - Aventura Sin Fin</title>
 
@@ -196,11 +190,71 @@
     const fechaInput   = document.getElementById('fecha-input');
     const fechaBtn     = document.getElementById('fecha-btn');
 
+    // ─── GRADIENT CACHE (se invalida en cada resize) ─────────────────────────── //
+    let gradSkyEscena   = null;   // cielo atardecer fijo de Cap2
+    let gradSueloEscena = null;   // suelo verde fijo de Cap2
+    let gradHabitacion  = null;   // fondo habitación interior
+    let gradVela        = null;   // glow de vela
+    let gradCielo       = null;   // cielo del juego principal
+    let gradCieloT      = -999;   // valor de t para el que se creó gradCielo
+
+    function recalcularGradientes() {
+      const W = canvas.width, H = canvas.height, horizY = H * 0.58;
+
+      gradSkyEscena = ctx.createLinearGradient(0, 0, 0, horizY);
+      gradSkyEscena.addColorStop(0,    '#18082E');
+      gradSkyEscena.addColorStop(0.45, '#8B2E10');
+      gradSkyEscena.addColorStop(1,    '#E87020');
+
+      gradSueloEscena = ctx.createLinearGradient(0, horizY, 0, H);
+      gradSueloEscena.addColorStop(0, '#5DA840');
+      gradSueloEscena.addColorStop(1, '#2C5018');
+
+      gradHabitacion = ctx.createLinearGradient(0, 0, 0, H);
+      gradHabitacion.addColorStop(0,    '#8B3D10');
+      gradHabitacion.addColorStop(0.65, '#6A2E0A');
+      gradHabitacion.addColorStop(1,    '#3A1804');
+
+      gradVela = ctx.createRadialGradient(W/2, H*0.35, 0, W/2, H*0.35, W*0.55);
+      gradVela.addColorStop(0, 'rgba(255,180,60,0.40)');
+      gradVela.addColorStop(1, 'rgba(0,0,0,0)');
+
+      gradCieloT = -999; // forzar recreación del gradiente de cielo
+    }
+
+    // ─── HELPERS REUTILIZABLES ────────────────────────────────────────────────── //
+
+    // Convierte coordenadas de toque a espacio del canvas (escala CSS → pixeles reales)
+    function getTouchPos(evento) {
+      const rect   = canvas.getBoundingClientRect();
+      const scaleX = canvas.width  / rect.width;
+      const scaleY = canvas.height / rect.height;
+      return {
+        x: (evento.touches[0].clientX - rect.left) * scaleX,
+        y: (evento.touches[0].clientY - rect.top)  * scaleY,
+      };
+    }
+
+    // Hit-test de rectángulo con padding opcional
+    function hitRect(tx, ty, x, y, w, h, pad = 0) {
+      return tx >= x - pad && tx <= x + w + pad
+          && ty >= y - pad && ty <= y + h + pad;
+    }
+
+    // Texto con glow sin tener que repetir el patrón shadowColor/shadowBlur/reset
+    function glowText(text, x, y, color, blur, maxW) {
+      ctx.shadowColor = color;
+      ctx.shadowBlur  = blur;
+      maxW != null ? ctx.fillText(text, x, y, maxW) : ctx.fillText(text, x, y);
+      ctx.shadowBlur  = 0;
+    }
+
     function ajustarTamano() {
       canvas.width  = window.innerWidth;
       canvas.height = window.innerHeight;
-      generarEstrellas(); // si cambia el tamaño, regeneramos el campo de estrellas
-      actualizarPiso();   // recalculamos el suelo al nuevo tamaño de pantalla
+      generarEstrellas();
+      actualizarPiso();
+      recalcularGradientes();
     }
 
     let estrellas    = [];
@@ -256,8 +310,8 @@
     const NAVE_ALTO     = 28;
     const NAVE_X        = 80;
 
-    let pisoY = 0;
-    let nave  = { y: 0, velY: 0, enPiso: true };
+    let   pisoY = 0;
+    const nave  = { y: 0, velY: 0, enPiso: true };
 
     function actualizarPiso() {
       pisoY = canvas.height - 100;
@@ -475,12 +529,15 @@
       else if (t < 0.80) alfaEstrellas = 0.7 * (t - 0.67) / 0.13;
       else               alfaEstrellas = 0.7;
 
-      // Fondo degradado de arriba a abajo (cubre el fondo CSS)
+      // Fondo degradado — se recrea solo cuando t cambia visualmente (dirty-check)
       const { top, bot } = getColorCielo(t);
-      const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-      grad.addColorStop(0, top);
-      grad.addColorStop(1, bot);
-      ctx.fillStyle = grad;
+      if (Math.abs(t - gradCieloT) > 0.004) {
+        gradCielo  = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        gradCielo.addColorStop(0, top);
+        gradCielo.addColorStop(1, bot);
+        gradCieloT = t;
+      }
+      ctx.fillStyle = gradCielo;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Sol — visible de t=0.20 a t=0.80, con fade en los bordes
@@ -616,9 +673,8 @@
 
         if (obs.tipo === 'piso') {
           // Tronco caído con veta de madera
-          ctx.fillStyle = '#7A4418'; ctx.shadowColor = '#5A3010'; ctx.shadowBlur = 8;
+          ctx.fillStyle = '#7A4418';
           ctx.fillRect(obs.x, obs.y, aw, obs.alto);
-          ctx.shadowBlur = 0;
           ctx.fillStyle = '#C88040';
           ctx.beginPath(); ctx.ellipse(obs.x + aw / 2, obs.y + 5, aw * 0.38, 5, 0, 0, Math.PI * 2); ctx.fill();
           ctx.strokeStyle = '#5A3010'; ctx.lineWidth = 1.5;
@@ -644,7 +700,7 @@
 
         } else if (obs.tipo === 'barda') {
           // Barda de madera: postes + rieles
-          ctx.fillStyle = '#A0722A'; ctx.shadowColor = '#6B4820'; ctx.shadowBlur = 7;
+          ctx.fillStyle = '#A0722A';
           ctx.fillRect(obs.x, obs.y + obs.alto * 0.22, aw, 5);
           ctx.fillRect(obs.x, obs.y + obs.alto * 0.52, aw, 5);
           ctx.fillRect(obs.x, obs.y + obs.alto * 0.82, aw, 5);
@@ -653,7 +709,6 @@
             const px = obs.x + (i / (nPosts - 1)) * (aw - 8);
             ctx.fillRect(px, obs.y, 8, obs.alto);
           }
-          ctx.shadowBlur = 0;
 
         } else if (obs.tipo === 'rio') {
           // Río: agua con olas animadas
@@ -676,9 +731,8 @@
 
         } else if (obs.tipo === 'rama') {
           // Rama del techo con hojas colgantes
-          ctx.fillStyle = '#5D4037'; ctx.shadowColor = '#3E2723'; ctx.shadowBlur = 8;
+          ctx.fillStyle = '#5D4037';
           ctx.fillRect(obs.x, obs.y, aw, obs.alto);
-          ctx.shadowBlur = 0;
           ctx.strokeStyle = '#4E342E'; ctx.lineWidth = 1.5;
           for (let i = 1; i < 3; i++) {
             ctx.beginPath();
@@ -687,14 +741,13 @@
             ctx.stroke();
           }
           // Hojas en el borde inferior
-          ctx.fillStyle = '#388E3C'; ctx.shadowColor = '#2E7D32'; ctx.shadowBlur = 6;
+          ctx.fillStyle = '#388E3C';
           const leafY = obs.y + obs.alto;
           for (let i = 0; i < 5; i++) {
             const lx = obs.x + (i / 4) * (aw - 14) + 7;
             const lr = 8 + Math.sin(i * 1.3) * 3;
             ctx.beginPath(); ctx.arc(lx, leafY + lr * 0.45, lr, 0, Math.PI * 2); ctx.fill();
           }
-          ctx.shadowBlur = 0;
 
         } else if (obs.tipo === 'puente') {
           // Puente elevado: pilares + tablones
@@ -704,9 +757,8 @@
           ctx.fillRect(obs.x + aw - 18,   obs.y + obs.alto, pilW, pilH);
           if (aw > 80) ctx.fillRect(obs.x + aw / 2 - 4, obs.y + obs.alto, pilW, pilH);
           // Tablones
-          ctx.fillStyle = '#A1887F'; ctx.shadowColor = '#6D4C41'; ctx.shadowBlur = 8;
+          ctx.fillStyle = '#A1887F';
           ctx.fillRect(obs.x, obs.y, aw, obs.alto);
-          ctx.shadowBlur = 0;
           ctx.strokeStyle = '#6D4C41'; ctx.lineWidth = 1.5;
           for (let px = obs.x + 14; px < obs.x + aw; px += 14) {
             ctx.beginPath(); ctx.moveTo(px, obs.y); ctx.lineTo(px, obs.y + obs.alto); ctx.stroke();
@@ -788,14 +840,14 @@
 
     let screenShake   = 0; // frames de vibración al morir
     const SAFE_W      = () => canvas.width  * 0.88;
-    const SAFE_H      = () => canvas.height * 0.88;
-    const SAFE_PAD    = () => canvas.width  * 0.06;
 
     // Dibuja texto siempre dentro del ancho seguro (sin squish excesivo, solo si rebasa)
     function safeText(text, x, y, maxW) {
       const mw = maxW ?? SAFE_W();
       ctx.fillText(text, x, y, mw);
     }
+
+    // ─── DRAWING — GAME STATES ────────────────────────────────────────────────── //
 
     function dibujarGameOver() {
       ctx.save();
@@ -1017,6 +1069,8 @@
       ctx.restore();
     }
 
+    // ─── DRAWING — CHARACTERS & SCENES ───────────────────────────────────────── //
+
     // Elena: Hopper con lazo rosa
     function dibujarElena(cx, cy, escala) {
       ctx.save();
@@ -1036,11 +1090,7 @@
       const vpX      = canvas.width / 2;
       const horizonY = canvas.height * 0.58;
 
-      const sky = ctx.createLinearGradient(0, 0, 0, horizonY);
-      sky.addColorStop(0,    '#18082E');
-      sky.addColorStop(0.45, '#8B2E10');
-      sky.addColorStop(1,    '#E87020');
-      ctx.fillStyle = sky;
+      ctx.fillStyle = gradSkyEscena;
       ctx.fillRect(0, 0, canvas.width, horizonY);
 
       ctx.save();
@@ -1049,10 +1099,7 @@
       ctx.beginPath(); ctx.arc(vpX, horizonY, 22, 0, Math.PI * 2); ctx.fill();
       ctx.shadowBlur = 0; ctx.restore();
 
-      const suelo = ctx.createLinearGradient(0, horizonY, 0, canvas.height);
-      suelo.addColorStop(0, '#5DA840');
-      suelo.addColorStop(1, '#2C5018');
-      ctx.fillStyle = suelo;
+      ctx.fillStyle = gradSueloEscena;
       ctx.fillRect(0, horizonY, canvas.width, canvas.height - horizonY);
 
       // Sendero de tierra (trapecio perspectiva)
@@ -1093,7 +1140,7 @@
     }
 
     // Casa pequeña con puerta animada y Elena saliendo
-    function dibujarCasaConPuerta(doorProgress, elenaOffset) {
+    function dibujarCasaConPuerta(doorProgress) {
       const vpX      = canvas.width  / 2;
       const horizonY = canvas.height * 0.58;
       const ESC      = 0.72;
@@ -1142,12 +1189,6 @@
         ctx.beginPath(); ctx.arc(dX + visW - 3 * ESC, dY + dH * 0.55, 2 * ESC, 0, Math.PI * 2); ctx.fill();
       }
 
-      if (elenaOffset > 0) {
-        const esc2   = (0.28 + elenaOffset * 0.06) * ESC;
-        const elenaX = vpX + dW * 0.1;
-        const elenaY = baseY - 4 * ESC + elenaOffset * 8;
-        dibujarElena(elenaX, elenaY, esc2);
-      }
     }
 
     function dibujarTocaContinuar() {
@@ -1303,12 +1344,8 @@
         ctx.save();
         ctx.globalAlpha = intAlpha;
 
-        // fondo de la habitación
-        const bg = ctx.createLinearGradient(0, 0, 0, H);
-        bg.addColorStop(0,    '#8B3D10');
-        bg.addColorStop(0.65, '#6A2E0A');
-        bg.addColorStop(1,    '#3A1804');
-        ctx.fillStyle = bg;
+        // fondo de la habitación (gradiente cacheado)
+        ctx.fillStyle = gradHabitacion;
         ctx.fillRect(0, 0, W, H);
 
         // piso de madera
@@ -1322,11 +1359,8 @@
           ctx.stroke();
         }
 
-        // brillo de vela (glow radial central)
-        const cg = ctx.createRadialGradient(cxP, H * 0.35, 0, cxP, H * 0.35, W * 0.55);
-        cg.addColorStop(0, 'rgba(255,180,60,0.40)');
-        cg.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = cg;
+        // brillo de vela (gradiente cacheado)
+        ctx.fillStyle = gradVela;
         ctx.fillRect(0, 0, W, H);
 
         // ventana
@@ -1481,7 +1515,7 @@
       // ── CAMINO: cinemática 3D automática ──
       } else if (estadoCap2 === 'CAMINO') {
         dibujarEscenaCamino();
-        dibujarCasaConPuerta(0, 0);
+        dibujarCasaConPuerta(0);
 
         const hopperT    = Math.min(1, cap2Frame / 240);
         const hopperCanY = canvas.height * 0.84 - (canvas.height * 0.84 - horizonY - 28) * hopperT;
@@ -2036,6 +2070,8 @@
     window.addEventListener('resize', ajustarTamano);
     requestAnimationFrame(loopPrueba);
 
+    // ─── INPUT HANDLERS ───────────────────────────────────────────────────────── //
+
     canvas.addEventListener('touchstart', function(evento) {
       evento.preventDefault();
 
@@ -2054,15 +2090,11 @@
         }
         // DIALOGO_PREVIO → tap botón → PROPUESTA_BOTONES
         if (estadoCap2 === 'DIALOGO_PREVIO' && cap2Frame > 80) {
-          const rect   = canvas.getBoundingClientRect();
-          const scaleX = canvas.width  / rect.width;
-          const scaleY = canvas.height / rect.height;
-          const tX = (evento.touches[0].clientX - rect.left) * scaleX;
-          const tY = (evento.touches[0].clientY - rect.top)  * scaleY;
+          const { x: tX, y: tY } = getTouchPos(evento);
           const cx = canvas.width / 2;
           const btnW = 190, btnH = 56;
           const btnX = cx - btnW / 2, btnY = canvas.height * 0.73;
-          if (tX >= btnX - 16 && tX <= btnX + btnW + 16 && tY >= btnY - 16 && tY <= btnY + btnH + 16) {
+          if (hitRect(tX, tY, btnX, btnY, btnW, btnH, 16)) {
             estadoCap2 = 'PROPUESTA_BOTONES';
             cap2Frame  = 0;
             reposicionarNo();
@@ -2071,19 +2103,14 @@
         }
         // PROPUESTA_BOTONES → SÍ / NO
         if (estadoCap2 === 'PROPUESTA_BOTONES') {
-          const rect   = canvas.getBoundingClientRect();
-          const scaleX = canvas.width  / rect.width;
-          const scaleY = canvas.height / rect.height;
-          const tX = (evento.touches[0].clientX - rect.left) * scaleX;
-          const tY = (evento.touches[0].clientY - rect.top)  * scaleY;
+          const { x: tX, y: tY } = getTouchPos(evento);
           const cx = canvas.width / 2, cy = canvas.height / 2;
-          if (tX >= cx - 75 && tX <= cx + 75 && tY >= cy + 20 && tY <= cy + 72) {
+          if (hitRect(tX, tY, cx - 75, cy + 20, 150, 52)) {
             iniciarCelebracion();
             return;
           }
           const pad = 24; // generoso para que el NO sea fácil de tocar
-          if (tX >= btnNoPosX - pad && tX <= btnNoPosX + 110 + pad
-           && tY >= btnNoPosY - pad && tY <= btnNoPosY + 48  + pad) {
+          if (hitRect(tX, tY, btnNoPosX, btnNoPosY, 110, 48, pad)) {
             reposicionarNo();
           }
           return;
@@ -2110,20 +2137,16 @@
         if (estadoCap3 === 'FECHA_INPUT') return; // DOM overlay lo maneja
 
         if (estadoCap3 === 'FECHA_FINAL' && cap3Frame > 90) {
-          const rect   = canvas.getBoundingClientRect();
-          const scaleX = canvas.width  / rect.width;
-          const scaleY = canvas.height / rect.height;
-          const tX     = (evento.touches[0].clientX - rect.left) * scaleX;
-          const tY     = (evento.touches[0].clientY - rect.top)  * scaleY;
-          const cx2    = canvas.width / 2;
+          const { x: tX, y: tY } = getTouchPos(evento);
+          const cx2 = canvas.width / 2;
           const bW = 130, bH = 44, bGap = 14;
           const bY  = canvas.height - 86;
-          const bX1 = cx2 - bW - bGap / 2;  // Guardar
-          const bX2 = cx2 + bGap / 2;         // Reiniciar
+          const bX1 = cx2 - bW - bGap / 2;
+          const bX2 = cx2 + bGap / 2;
           const pad = 12;
-          if (tX >= bX1 - pad && tX <= bX1 + bW + pad && tY >= bY - pad && tY <= bY + bH + pad) {
+          if (hitRect(tX, tY, bX1, bY, bW, bH, pad)) {
             guardarFotoFinal();
-          } else if (tX >= bX2 - pad && tX <= bX2 + bW + pad && tY >= bY - pad && tY <= bY + bH + pad) {
+          } else if (hitRect(tX, tY, bX2, bY, bW, bH, pad)) {
             forzarAtardecer   = false;
             partidasJugadas   = 0;
             propuestaAceptada = false;
