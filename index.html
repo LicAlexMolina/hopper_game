@@ -1021,17 +1021,32 @@
 
     async function guardarFotoFinal() {
       try {
-        const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+        // Re-renderizar a resolución física (DPR 2x/3x) para imagen nítida en carrete
+        const dpr = Math.min(window.devicePixelRatio || 1, 3);
+        const W   = canvas.width, H = canvas.height;
+
+        const hiCanvas  = document.createElement('canvas');
+        hiCanvas.width  = W * dpr;
+        hiCanvas.height = H * dpr;
+        const hiCtx     = hiCanvas.getContext('2d');
+        hiCtx.scale(dpr, dpr);
+
+        // Swap temporal: las funciones de dibujo usan el ctx global
+        const savedCtx = ctx;
+        ctx = hiCtx;
+        recalcularGradientes();
+        dibujarCapitulo3();
+        ctx = savedCtx;
+        recalcularGradientes(); // restaura gradientes para el ctx del juego
+
+        const blob = await new Promise(res => hiCanvas.toBlob(res, 'image/png'));
         const file = new File([blob], 'hopper-elena-y-alex.png', { type: 'image/png' });
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({ files: [file], title: 'Elena ❤ Alex', text: '¡Oficialmente novios!' });
         } else {
-          // Fallback: descarga directa
           const url = URL.createObjectURL(blob);
           const a   = document.createElement('a');
-          a.href     = url;
-          a.download = 'hopper-elena-y-alex.png';
-          a.click();
+          a.href = url; a.download = 'hopper-elena-y-alex.png'; a.click();
           setTimeout(() => URL.revokeObjectURL(url), 3000);
         }
       } catch (e) {
