@@ -39,7 +39,7 @@
     #gameContainer {
       position: relative;
       width: 100vw;
-      height: 100vh;
+      height: 100dvh; /* dvh = dynamic viewport height: descuenta barra del navegador móvil */
       background: radial-gradient(ellipse at 50% 30%, var(--bg-nebula) 0%, var(--bg-deep) 70%);
     }
 
@@ -251,7 +251,8 @@
 
     function ajustarTamano() {
       canvas.width  = window.innerWidth;
-      canvas.height = window.innerHeight;
+      // visualViewport descuenta la barra del navegador en móvil; innerHeight no siempre lo hace
+      canvas.height = window.visualViewport ? window.visualViewport.height : window.innerHeight;
       generarEstrellas();
       actualizarPiso();
       recalcularGradientes();
@@ -1719,20 +1720,15 @@
         const padT = 68, padB = 90;
         const aw = canvas.width - 32, ah = canvas.height - padT - padB;
 
-        // Deriva suave: sin/cos con fase única por foto — sin zoom, sin pixelación
+        // Foto centrada, sin movimiento — el crossfade ya es suficiente animación
         const drawPhoto = (imgIdx, alpha) => {
           const im = imgsCap3[imgIdx];
           if (!im || !im.complete || !im.naturalWidth) return;
-          // 2.5% de overscale fijo cubre el drift máximo (±8px) sin bordes oscuros
-          const sc = Math.min(aw / im.naturalWidth, ah / im.naturalHeight) * 1.025;
+          const sc = Math.min(aw / im.naturalWidth, ah / im.naturalHeight);
           const dw = im.naturalWidth  * sc;
           const dh = im.naturalHeight * sc;
-          // Cada foto tiene su propia fase → patrones distintos, sin sincronía
-          const phase  = imgIdx * 1.3;
-          const driftX = Math.sin(frameContador * 0.007 + phase) * 8;
-          const driftY = Math.cos(frameContador * 0.005 + phase) * 4;
-          const dx = cx - dw / 2 + driftX;
-          const dy = padT + ah / 2 - dh / 2 + driftY;
+          const dx = cx - dw / 2;
+          const dy = padT + ah / 2 - dh / 2;
           ctx.globalAlpha = alpha;
           ctx.save();
           ctx.beginPath(); ctx.roundRect(16, padT, aw, ah, 14); ctx.clip();
@@ -2068,6 +2064,8 @@
 
     ajustarTamano();
     window.addEventListener('resize', ajustarTamano);
+    // visualViewport se dispara cuando la barra del nav aparece/desaparece en móvil
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', ajustarTamano);
     requestAnimationFrame(loopPrueba);
 
     // ─── INPUT HANDLERS ───────────────────────────────────────────────────────── //
