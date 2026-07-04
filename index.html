@@ -73,8 +73,9 @@
     .hud-label {
       position: absolute;
       top: 16px;
-      left: 50%;
-      transform: translateX(-50%);
+      left: 0;
+      right: 0;
+      text-align: center;
       font-family: var(--font-display);
       font-size: 13px;
       letter-spacing: 3px;
@@ -82,6 +83,7 @@
       text-shadow: 0 0 6px var(--accent-cyan);
       opacity: 0.85;
       pointer-events: none;
+      white-space: nowrap;
     }
 
     /* ── Capítulo 3: selector de fecha ── */
@@ -939,6 +941,26 @@
       return { dia: String(parseInt(d)), mes: 'de ' + meses[parseInt(m) - 1], anio: 'de ' + y };
     }
 
+    async function guardarFotoFinal() {
+      try {
+        const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+        const file = new File([blob], 'hopper-elena-y-alex.png', { type: 'image/png' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: 'Elena ❤ Alex', text: '¡Oficialmente novios!' });
+        } else {
+          // Fallback: descarga directa
+          const url = URL.createObjectURL(blob);
+          const a   = document.createElement('a');
+          a.href     = url;
+          a.download = 'hopper-elena-y-alex.png';
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 3000);
+        }
+      } catch (e) {
+        // El usuario canceló el share — no hacer nada
+      }
+    }
+
     fechaBtn.addEventListener('click', () => {
       const val = fechaInput.value;
       if (!val) return;
@@ -1327,9 +1349,9 @@
         })();
         if (reactAlpha > 0) {
           ctx.globalAlpha = intAlpha * reactAlpha;
-          ctx.font = '600 19px "Rajdhani", sans-serif';
+          ctx.font = '600 23px "Rajdhani", sans-serif';
           ctx.fillStyle = '#FFE8F5'; ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 10;
-          ctx.fillText('¡Alex! ¿Qué haces aquí...?', cxP, H * 0.15);
+          ctx.fillText('¡Alex! ¿Qué haces aquí...?', cxP, H * 0.16);
           ctx.shadowBlur = 0;
         }
 
@@ -1337,26 +1359,26 @@
         if (f >= PROPOSAL) {
           // "Elena..." — posición distinta al react text para evitar encimamiento
           ctx.globalAlpha = intAlpha * Math.min(1, (f - PROPOSAL) / 50);
-          ctx.font = '700 28px "Orbitron", sans-serif';
+          ctx.font = '700 30px "Orbitron", sans-serif';
           ctx.fillStyle = '#FFD166'; ctx.shadowColor = '#FFD166'; ctx.shadowBlur = 18;
-          ctx.fillText('Elena...', cxP, H * 0.11);
+          ctx.fillText('Elena...', cxP, H * 0.10);
           ctx.shadowBlur = 0;
 
           // "¿Quieres ser mi novia?"
           if (f >= PROPOSAL + 65) {
             ctx.globalAlpha = intAlpha * Math.min(1, (f - PROPOSAL - 65) / 55);
-            ctx.font = '700 24px "Orbitron", sans-serif';
+            ctx.font = '700 26px "Orbitron", sans-serif';
             ctx.fillStyle = '#FFFFFF'; ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 14;
-            ctx.fillText('¿Quieres ser mi novia?', cxP, H * 0.20);
+            ctx.fillText('¿Quieres ser mi novia?', cxP, H * 0.21);
             ctx.shadowBlur = 0;
           }
 
           // "— con todo mi cariño, Alex 🦫"
           if (f >= PROPOSAL + 120) {
             ctx.globalAlpha = intAlpha * Math.min(1, (f - PROPOSAL - 120) / 55);
-            ctx.font = '500 19px "Rajdhani", sans-serif';
+            ctx.font = '500 22px "Rajdhani", sans-serif';
             ctx.fillStyle = '#D8D0FF';
-            ctx.fillText('— con todo mi cariño, Alex  🦫', cxP, H * 0.28);
+            ctx.fillText('— con todo mi cariño, Alex  🦫', cxP, H * 0.30);
           }
         }
 
@@ -1498,8 +1520,8 @@
         // Tarjeta de diálogo
         const cardW = canvas.width - 48;
         const cardX = 24;
-        const cardY = cy - 162;
-        const cardH = 148;
+        const cardY = cy - 175;
+        const cardH = 168;
         ctx.fillStyle   = 'rgba(8,4,22,0.82)';
         ctx.strokeStyle = 'rgba(255,209,102,0.38)';
         ctx.lineWidth   = 1.5;
@@ -1513,42 +1535,42 @@
         ctx.stroke();
 
         // Texto línea 1
-        ctx.font      = '600 21px "Rajdhani", sans-serif';
+        ctx.font      = '600 26px "Rajdhani", sans-serif';
         ctx.fillStyle = '#E8F1FF';
         ctx.textAlign = 'center';
-        ctx.fillText('Me la he pasado increíble', cx, cardY + 44);
+        ctx.fillText('Me la he pasado increíble', cx, cardY + 50);
 
         // Texto línea 2
-        ctx.fillText('contigo este último mes,', cx, cardY + 72);
+        ctx.fillText('contigo este último mes,', cx, cardY + 84);
 
         // Separación y línea 3 en dorado
-        ctx.font      = '600 21px "Rajdhani", sans-serif';
+        ctx.font      = '600 26px "Rajdhani", sans-serif';
         ctx.fillStyle = '#FFD166';
         ctx.shadowColor = '#FFD166'; ctx.shadowBlur = 10;
-        ctx.fillText('y quería preguntarte algo...', cx, cardY + 108);
+        ctx.fillText('y quería preguntarte algo...', cx, cardY + 124);
         ctx.shadowBlur = 0;
 
         // Atribución
-        ctx.font      = '400 14px "Rajdhani", sans-serif';
+        ctx.font      = '400 15px "Rajdhani", sans-serif';
         ctx.fillStyle = 'rgba(200,160,255,0.65)';
         ctx.textAlign = 'right';
-        ctx.fillText('— Alex  🦫', cardX + cardW - 18, cardY + cardH - 14);
+        ctx.fillText('— Alex  🦫', cardX + cardW - 18, cardY + cardH - 12);
         ctx.textAlign = 'center';
 
         // Botón Continuar (aparece después de 80 frames)
         if (cap2Frame > 80) {
           const btnAlpha = Math.min(1, (cap2Frame - 80) / 30);
           ctx.globalAlpha = fi * btnAlpha;
-          const btnW = 180, btnH = 54;
-          const btnX = cx - btnW / 2, btnY = canvas.height * 0.72;
+          const btnW = 190, btnH = 56;
+          const btnX = cx - btnW / 2, btnY = canvas.height * 0.73;
           const pulso = 0.88 + 0.12 * Math.sin(frameContador * 0.1);
           ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 20 * pulso;
           ctx.fillStyle   = '#FF2E92';
           ctx.beginPath(); ctx.roundRect(btnX, btnY, btnW, btnH, 14); ctx.fill();
           ctx.shadowBlur  = 0;
-          ctx.font        = '700 19px "Orbitron", sans-serif';
+          ctx.font        = '700 21px "Orbitron", sans-serif';
           ctx.fillStyle   = '#FFFFFF';
-          ctx.fillText('Continuar  ›', cx, btnY + 33);
+          ctx.fillText('Continuar  ›', cx, btnY + 35);
         }
 
         ctx.globalAlpha = 1;
@@ -1740,16 +1762,17 @@
         });
         ctx.globalAlpha = 1;
 
-        // Mini polaroids de fotos en la parte superior
+        // Mini polaroids — centradas, bajadas para no encimarse con el marco HUD
         const thumbs = [0, 2, 4];
         const angles = [-0.09, 0, 0.09];
         const tW = 68, tH = 90, tGap = 10;
-        const tStartX = cx - (tW * thumbs.length + tGap * (thumbs.length-1)) / 2 + tW/2;
+        const tCenterY  = 155; // bajadas del borde HUD
+        const tStartX   = cx - (tW * thumbs.length + tGap * (thumbs.length-1)) / 2 + tW/2;
         thumbs.forEach((idx, i) => {
           const img = imgsCap3[idx];
           if (!img.complete || !img.naturalWidth) return;
           ctx.save();
-          ctx.translate(tStartX + i * (tW + tGap), 80);
+          ctx.translate(tStartX + i * (tW + tGap), tCenterY);
           ctx.rotate(angles[i]);
           ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 5;
           ctx.fillStyle = '#FFFFFF';
@@ -1769,7 +1792,7 @@
         ctx.globalAlpha = fi;
 
         // Hoppers dándose un besito
-        const topSection = canvas.height * 0.32;
+        const topSection = canvas.height * 0.38;
         const approachT  = Math.min(1, cap3Frame / 90);
         const ESC  = 0.52;
         const sep  = 50 - approachT * 16;
@@ -1781,57 +1804,71 @@
         ctx.fillText('❤', cx, topSection - 22);
 
         // Título "Elena ❤ Alex"
-        ctx.font        = '700 20px "Orbitron", sans-serif';
+        ctx.font        = '700 22px "Orbitron", sans-serif';
         ctx.fillStyle   = '#FF2E92';
         ctx.shadowColor = '#FF2E92'; ctx.shadowBlur = 16;
-        ctx.fillText('Elena  ❤  Alex', cx, topSection + 46);
+        ctx.fillText('Elena  ❤  Alex', cx, topSection + 50);
         ctx.shadowBlur  = 0;
 
         // Separador
         ctx.globalAlpha = fi * 0.45;
         ctx.strokeStyle = 'rgba(255,46,146,0.6)'; ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(cx - 80, topSection + 64); ctx.lineTo(cx + 80, topSection + 64);
+        ctx.moveTo(cx - 85, topSection + 68); ctx.lineTo(cx + 85, topSection + 68);
         ctx.stroke();
         ctx.globalAlpha = fi;
 
         // Texto "Oficialmente novios desde el"
-        ctx.font      = '500 11px "Rajdhani", sans-serif';
+        ctx.font      = '500 13px "Rajdhani", sans-serif';
         ctx.fillStyle = 'rgba(200,160,255,0.85)';
-        ctx.fillText('OFICIALMENTE NOVIOS DESDE EL', cx, topSection + 86);
+        ctx.fillText('OFICIALMENTE NOVIOS DESDE EL', cx, topSection + 90);
 
         // La fecha: día grande, mes y año abajo
         const fecha = formatearFecha(fechaNoviazgo);
-        const dayFontSize = Math.min(76, canvas.width * 0.19);
+        const dayFontSize = Math.min(72, canvas.width * 0.18);
+        const dateBaseY   = topSection + 90 + dayFontSize * 1.1;
         ctx.font        = `900 ${dayFontSize}px "Orbitron", sans-serif`;
         ctx.fillStyle   = '#FFFFFF';
         ctx.shadowColor = '#FFD166'; ctx.shadowBlur = 28;
-        ctx.fillText(fecha.dia, cx, topSection + 86 + dayFontSize * 1.05);
+        ctx.fillText(fecha.dia, cx, dateBaseY);
         ctx.shadowBlur  = 0;
 
-        ctx.font      = '700 19px "Orbitron", sans-serif';
+        ctx.font      = '700 20px "Orbitron", sans-serif';
         ctx.fillStyle = '#FFD166';
-        ctx.fillText(fecha.mes, cx, topSection + 86 + dayFontSize * 1.05 + 32);
+        ctx.fillText(fecha.mes, cx, dateBaseY + 34);
 
-        ctx.font      = '500 15px "Rajdhani", sans-serif';
+        ctx.font      = '600 17px "Rajdhani", sans-serif';
         ctx.fillStyle = 'rgba(200,160,255,0.9)';
-        ctx.fillText(fecha.anio, cx, topSection + 86 + dayFontSize * 1.05 + 56);
+        ctx.fillText(fecha.anio, cx, dateBaseY + 58);
 
-        ctx.font      = '600 16px "Rajdhani", sans-serif';
+        ctx.font      = '600 18px "Rajdhani", sans-serif';
         ctx.fillStyle = '#E8D0FF';
-        ctx.fillText('te quiero mucho  ❤', cx, topSection + 86 + dayFontSize * 1.05 + 80);
+        ctx.fillText('te quiero mucho  ❤', cx, dateBaseY + 82);
 
-        // Botón Reiniciar
+        // Botones: Guardar + Reiniciar lado a lado
         if (cap3Frame > 90) {
-          ctx.globalAlpha = Math.min(1, (cap3Frame - 90) / 30) * fi;
-          const btnW = 130, btnH = 38;
-          const btnX = cx - btnW/2, btnY = canvas.height - 85;
+          const btnA  = Math.min(1, (cap3Frame - 90) / 30) * fi;
+          ctx.globalAlpha = btnA;
+          const bW = 130, bH = 44, bGap = 14;
+          const bY  = canvas.height - 86;
+          const bX1 = cx - bW - bGap / 2;   // Guardar (izq)
+          const bX2 = cx + bGap / 2;          // Reiniciar (der)
+
+          // Guardar
+          ctx.fillStyle   = 'rgba(255,46,146,0.22)';
+          ctx.strokeStyle = 'rgba(255,46,146,0.55)'; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.roundRect(bX1, bY, bW, bH, 10); ctx.fill(); ctx.stroke();
+          ctx.font      = '600 14px "Rajdhani", sans-serif';
+          ctx.fillStyle = '#FF2E92';
+          ctx.fillText('Guardar  ⬇', cx - bW/2 - bGap/2, bY + 27);
+
+          // Reiniciar
           ctx.fillStyle   = 'rgba(30,15,50,0.78)';
           ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 1;
-          ctx.beginPath(); ctx.roundRect(btnX, btnY, btnW, btnH, 10); ctx.fill(); ctx.stroke();
-          ctx.font      = '500 13px "Rajdhani", sans-serif';
+          ctx.beginPath(); ctx.roundRect(bX2, bY, bW, bH, 10); ctx.fill(); ctx.stroke();
+          ctx.font      = '600 14px "Rajdhani", sans-serif';
           ctx.fillStyle = 'rgba(255,255,255,0.62)';
-          ctx.fillText('Reiniciar', cx, btnY + 25);
+          ctx.fillText('Reiniciar', cx + bW/2 + bGap/2, bY + 27);
         }
 
         ctx.globalAlpha = 1;
@@ -1927,8 +1964,8 @@
           const tX = (evento.touches[0].clientX - rect.left) * scaleX;
           const tY = (evento.touches[0].clientY - rect.top)  * scaleY;
           const cx = canvas.width / 2;
-          const btnW = 180, btnH = 54;
-          const btnX = cx - btnW / 2, btnY = canvas.height * 0.72;
+          const btnW = 190, btnH = 56;
+          const btnX = cx - btnW / 2, btnY = canvas.height * 0.73;
           if (tX >= btnX - 16 && tX <= btnX + btnW + 16 && tY >= btnY - 16 && tY <= btnY + btnH + 16) {
             estadoCap2 = 'PROPUESTA_BOTONES';
             cap2Frame  = 0;
@@ -1981,9 +2018,15 @@
           const scaleY = canvas.height / rect.height;
           const tX     = (evento.touches[0].clientX - rect.left) * scaleX;
           const tY     = (evento.touches[0].clientY - rect.top)  * scaleY;
-          const btnW = 130, btnH = 38;
-          const btnX = canvas.width / 2 - btnW / 2, btnY = canvas.height - 85;
-          if (tX >= btnX && tX <= btnX + btnW && tY >= btnY && tY <= btnY + btnH) {
+          const cx2    = canvas.width / 2;
+          const bW = 130, bH = 44, bGap = 14;
+          const bY  = canvas.height - 86;
+          const bX1 = cx2 - bW - bGap / 2;  // Guardar
+          const bX2 = cx2 + bGap / 2;         // Reiniciar
+          const pad = 12;
+          if (tX >= bX1 - pad && tX <= bX1 + bW + pad && tY >= bY - pad && tY <= bY + bH + pad) {
+            guardarFotoFinal();
+          } else if (tX >= bX2 - pad && tX <= bX2 + bW + pad && tY >= bY - pad && tY <= bY + bH + pad) {
             forzarAtardecer   = false;
             partidasJugadas   = 0;
             propuestaAceptada = false;
