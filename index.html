@@ -1719,20 +1719,20 @@
         const padT = 68, padB = 90;
         const aw = canvas.width - 32, ah = canvas.height - padT - padB;
 
-        // Función para dibujar una foto con Ken Burns + pan direccional
-        const drawPhoto = (imgIdx, alpha, frameOffset) => {
+        // Deriva suave: sin/cos con fase única por foto — sin zoom, sin pixelación
+        const drawPhoto = (imgIdx, alpha) => {
           const im = imgsCap3[imgIdx];
           if (!im || !im.complete || !im.naturalWidth) return;
-          const sc   = Math.min(aw / im.naturalWidth, ah / im.naturalHeight);
-          const kbf  = Math.min(frameOffset * 0.00025, 0.07);  // más movimiento
-          const kb   = 1 + kbf;
-          const panD = imgIdx % 2 === 0 ? 1 : -1;             // alterna dirección
-          const panX = Math.min(frameOffset * 0.055, 22) * panD;
-          const panY = Math.min(frameOffset * 0.018, 8);       // leve bajada
-          const dw   = im.naturalWidth  * sc * kb;
-          const dh   = im.naturalHeight * sc * kb;
-          const dx   = cx - dw / 2 + panX;
-          const dy   = padT + ah / 2 - dh / 2 + panY;
+          // 2.5% de overscale fijo cubre el drift máximo (±8px) sin bordes oscuros
+          const sc = Math.min(aw / im.naturalWidth, ah / im.naturalHeight) * 1.025;
+          const dw = im.naturalWidth  * sc;
+          const dh = im.naturalHeight * sc;
+          // Cada foto tiene su propia fase → patrones distintos, sin sincronía
+          const phase  = imgIdx * 1.3;
+          const driftX = Math.sin(frameContador * 0.007 + phase) * 8;
+          const driftY = Math.cos(frameContador * 0.005 + phase) * 4;
+          const dx = cx - dw / 2 + driftX;
+          const dy = padT + ah / 2 - dh / 2 + driftY;
           ctx.globalAlpha = alpha;
           ctx.save();
           ctx.beginPath(); ctx.roundRect(16, padT, aw, ah, 14); ctx.clip();
@@ -1742,10 +1742,10 @@
 
         // Foto anterior saliendo (crossfade)
         if (fotoAnterior >= 0 && fotoFadeIn < 0.92) {
-          drawPhoto(fotoAnterior, Math.max(0, 1 - fotoFadeIn * 1.25), 9999);
+          drawPhoto(fotoAnterior, Math.max(0, 1 - fotoFadeIn * 1.25));
         }
         // Foto actual entrando
-        drawPhoto(fotoActual, fotoFadeIn, cap3Frame);
+        drawPhoto(fotoActual, fotoFadeIn);
 
         // Viñeta cinematográfica (pulsante sutil)
         if (fotoFadeIn > 0.1) {
