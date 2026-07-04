@@ -1570,7 +1570,12 @@
           const btnX = canvas.width / 2 - btnW / 2;
           const btnY = canvas.height - 85;
           if (tX >= btnX && tX <= btnX + btnW && tY >= btnY && tY <= btnY + btnH) {
-            forzarAtardecer = false;
+            forzarAtardecer    = false;
+            partidasJugadas    = 0;
+            propuestaAceptada  = false;
+            localStorage.setItem('hopper_partidas', '0');
+            localStorage.removeItem('hopper_si');
+            estadoCap2 = 'INTRO';
             reiniciarJuego();
             estadoJuego = 'INICIO';
           }
